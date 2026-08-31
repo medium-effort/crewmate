@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Command } from 'commander';
 import { getAdapter, listAdapterNames } from '../harness/registry.js';
+import { readManifest } from '../harness/manifest.js';
 import type { UpdateResult } from '../harness/types.js';
 
 interface ErrorOutput {
@@ -83,16 +84,33 @@ export function registerUpdateCommand(program: Command): void {
   program
     .command('update')
     .description('Update crewmate integration files, prompts, plugins, and dependencies')
-    .option('-H, --harness <name>', `Target harness (${listAdapterNames().join(', ')})`, 'opencode')
+    .option('-H, --harness <name>', `Target harness (${listAdapterNames().join(', ')})`)
     .option('-d, --dir <path>', 'Target directory (defaults to current directory)')
     .option('--dry-run', 'Display planned updates without writing changes', false)
     .option('--no-backup', 'Do not create backup files before updating modified templates')
     .option('--json', 'Output raw JSON only (no human-readable messages)', false)
     .action(async (opts) => {
-      const adapter = getAdapter(opts.harness);
+      const targetDir = opts.dir ?? process.cwd();
+
+      // Auto-detect installed harness from manifest if not explicitly provided
+      let harnessName = opts.harness;
+      if (!harnessName) {
+        const manifest = readManifest(targetDir);
+        if (manifest?.harness) {
+          harnessName = manifest.harness;
+        } else if (existsSync(join(targetDir, '.agents', 'plugins', 'crewmate'))) {
+          harnessName = 'antigravity';
+        } else if (existsSync(join(targetDir, '.opencode'))) {
+          harnessName = 'opencode';
+        } else {
+          harnessName = 'opencode';
+        }
+      }
+
+      const adapter = getAdapter(harnessName);
       if (!adapter) {
         fail(
-          `Unknown harness "${opts.harness}"`,
+          `Unknown harness "${harnessName}"`,
           {
             available: listAdapterNames(),
           },
@@ -100,11 +118,10 @@ export function registerUpdateCommand(program: Command): void {
         );
       }
 
-      const targetDir = opts.dir ?? process.cwd();
-
       const opencodeDir = join(targetDir, '.opencode');
+      const agentsDir = join(targetDir, '.agents', 'plugins', 'crewmate');
       const crewmateDir = join(targetDir, '.crewmate');
-      if (!existsSync(opencodeDir) && !existsSync(crewmateDir)) {
+      if (!existsSync(opencodeDir) && !existsSync(agentsDir) && !existsSync(crewmateDir)) {
         fail(
           `Project is not initialized with crewmate. Run 'crewmate init' first.`,
           undefined,

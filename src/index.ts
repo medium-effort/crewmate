@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { CREWMATE_VERSION } from './harness/manifest.js';
 import { registerBriefCommand } from './commands/brief.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerUpdateCommand } from './commands/update.js';
@@ -10,10 +11,11 @@ import { registerActivityCommand } from './commands/activity.js';
 import { registerWatchCommand } from './commands/watch.js';
 import { registerSessionCommand } from './commands/session.js';
 import { registerWorkflowCommands } from './commands/workflow.js';
+import { registerMcpCommand } from './commands/mcp.js';
 
 const program = new Command();
 
-program.name('crewmate').description('AI agent workflow CLI tool').version('0.4.5');
+program.name('crewmate').description('AI agent workflow CLI tool').version(CREWMATE_VERSION);
 
 registerBriefCommand(program);
 registerInitCommand(program);
@@ -26,5 +28,6 @@ registerActivityCommand(program);
 registerWatchCommand(program);
 registerSessionCommand(program);
 registerWorkflowCommands(program);
+registerMcpCommand(program);
 
 program.parse();

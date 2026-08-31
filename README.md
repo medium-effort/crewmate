@@ -43,10 +43,17 @@ Then, inside the project you want to work on:
 
 ```bash
 cd ~/my-project
+
+# For OpenCode:
 crewmate init --harness opencode
+
+# For Antigravity IDE / Agent environment:
+crewmate init --harness antigravity
 ```
 
-This adds a few files under `.opencode/`:
+This sets up the required plugin, rule, workflow, and MCP integration files for your selected harness (under `.opencode/` or `.agents/plugins/crewmate/`).
+
+For OpenCode, this adds files under `.opencode/`:
 
 - `plugins/crewmate.ts` — hooks Crewmate's tools into OpenCode
 - `commands/workflow.md` — the `/workflow` command that executes graph workflows

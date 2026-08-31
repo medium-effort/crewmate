@@ -6,59 +6,87 @@ import { runMigrations } from './migrations.js';
 const DB_DIR = '.crewmate';
 const DB_FILE = 'crewmate.db';
 
-let db: Database.Database | null = null;
+const dbCache = new Map<string, Database.Database>();
+
+export function getCachedProjectRoots(): string[] {
+  return Array.from(dbCache.keys());
+}
 
 /**
+ * Finds the canonical project root by locating the .crewmate directory
  *
+ * @param startDir The starting directory (defaults to process.cwd())
+ * @param searchParents Whether to traverse upwards searching for .crewmate in parent directories (default true)
  */
-export function findProjectRoot(startDir: string): string {
-  let current = resolve(startDir);
+export function findProjectRoot(
+  startDir: string = process.cwd(),
+  searchParents: boolean = true
+): string {
+  if (process.env.CREWMATE_PROJECT_DIR) {
+    return resolve(process.env.CREWMATE_PROJECT_DIR);
+  }
 
+  const resolvedStart = resolve(startDir);
+  if (existsSync(join(resolvedStart, DB_DIR))) {
+    return resolvedStart;
+  }
+
+  if (!searchParents) {
+    return resolvedStart;
+  }
+
+  let current = resolvedStart;
   while (true) {
-    if (existsSync(join(current, DB_DIR)) && existsSync(join(current, '.git'))) {
+    if (existsSync(join(current, DB_DIR))) {
       return current;
     }
     const parent = dirname(current);
     if (parent === current) {
-      return startDir;
+      return resolvedStart;
     }
     current = parent;
   }
 }
 
 /**
- * Returns the singleton SQLite database connection, initializing it on first call
+ * Returns a SQLite database connection for the target project directory, initializing it on first call
  */
-export function getDb(): Database.Database {
-  if (db) {
-    return db;
+export function getDb(targetDir?: string): Database.Database {
+  const projectRoot = targetDir
+    ? findProjectRoot(targetDir, false)
+    : findProjectRoot(process.cwd(), true);
+  let connection = dbCache.get(projectRoot);
+
+  if (connection) {
+    return connection;
   }
 
-  const projectRoot = findProjectRoot(process.cwd());
   const dbDir = join(projectRoot, DB_DIR);
   mkdirSync(dbDir, { recursive: true });
 
   const dbPath = join(dbDir, DB_FILE);
-  db = new Database(dbPath);
+  connection = new Database(dbPath);
 
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('busy_timeout = 5000');
+  connection.pragma('journal_mode = WAL');
+  connection.pragma('foreign_keys = ON');
+  connection.pragma('busy_timeout = 5000');
 
-  runMigrations(db);
+  runMigrations(connection);
 
-  return db;
+  dbCache.set(projectRoot, connection);
+
+  return connection;
 }
 
-function closeDb(): void {
-  if (db) {
+export function closeDb(): void {
+  for (const [, connection] of dbCache.entries()) {
     try {
-      db.close();
+      connection.close();
     } catch {
       // already closed
     }
-    db = null;
   }
+  dbCache.clear();
 }
 
 process.on('exit', closeDb);

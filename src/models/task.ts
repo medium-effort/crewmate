@@ -1,6 +1,10 @@
 import type { ArtifactType } from './artifact.js';
 
 export const TASK_STATUSES = ['pending', 'in_progress', 'completed'] as const;
+/**
+ * Status of a task in the brief workflow
+ */
+export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 /**
  *

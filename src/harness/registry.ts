@@ -1,5 +1,6 @@
 import type { HarnessAdapter } from './types.js';
 import { OpenCodeAdapter } from './adapters/opencode/adapter.js';
+import { AntigravityAdapter } from './adapters/antigravity/adapter.js';
 
 /**
  * Adapter Registry
@@ -23,6 +24,7 @@ import { OpenCodeAdapter } from './adapters/opencode/adapter.js';
 
 const adapters: Record<string, HarnessAdapter> = {
   opencode: new OpenCodeAdapter(),
+  antigravity: new AntigravityAdapter(),
 };
 
 /**

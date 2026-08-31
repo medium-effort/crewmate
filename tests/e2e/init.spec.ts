@@ -223,6 +223,92 @@ describe('crewmate init', () => {
     });
   });
 
+  describe('antigravity harness', () => {
+    it('should create .agents/plugins/crewmate/ files and manifest', async () => {
+      const result = await runCli(['init', '--harness', 'antigravity'], { cwd: tmpDir });
+      await expectSuccess(result);
+
+      const output = parseJsonOutput(result.stdout) as Record<string, unknown>;
+      expect(output.ok).toBe(true);
+      expect(output.harness).toBe('antigravity');
+      expect(Array.isArray(output.filesWritten)).toBe(true);
+      expect(output.filesWritten).toContain('.agents/mcp_config.json');
+      expect(output.filesWritten).toContain('.agents/workflows/brief.md');
+      expect(output.filesWritten).toContain('.agents/workflows/execute.md');
+      expect(output.filesWritten).toContain('.agents/plugins/crewmate/plugin.json');
+      expect(output.filesWritten).toContain('.agents/plugins/crewmate/mcp_config.json');
+      expect(output.filesWritten).toContain('.agents/plugins/crewmate/hooks.json');
+      expect(output.filesWritten).toContain('.agents/plugins/crewmate/rules/crewmate.md');
+      expect(output.filesWritten).toContain(
+        '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md'
+      );
+      expect(output.filesWritten).toContain(
+        '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md'
+      );
+      expect(output.filesWritten).toContain(
+        '.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md'
+      );
+      expect(output.filesWritten).toContain(
+        '.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md'
+      );
+      expect(output.filesWritten).toContain(
+        '.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md'
+      );
+    });
+
+    it('should write valid plugin manifest and configs', async () => {
+      const result = await runCli(['init', '--harness', 'antigravity'], { cwd: tmpDir });
+      await expectSuccess(result);
+
+      const { readFileSync } = await import('node:fs');
+
+      const pluginJson = JSON.parse(
+        readFileSync(join(tmpDir, '.agents', 'plugins', 'crewmate', 'plugin.json'), 'utf-8')
+      );
+      expect(pluginJson.name).toBe('crewmate');
+
+      const mcpConfig = JSON.parse(
+        readFileSync(join(tmpDir, '.agents', 'plugins', 'crewmate', 'mcp_config.json'), 'utf-8')
+      );
+      expect(mcpConfig.mcpServers.crewmate).toBeDefined();
+
+      const ruleContent = readFileSync(
+        join(tmpDir, '.agents', 'plugins', 'crewmate', 'rules', 'crewmate.md'),
+        'utf-8'
+      );
+      expect(ruleContent).toContain('# Crewmate Orchestration Rules');
+      expect(ruleContent).toContain('ask_question');
+    });
+
+    it('should merge and preserve existing .agents/mcp_config.json', async () => {
+      const { mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
+      mkdirSync(join(tmpDir, '.agents'), { recursive: true });
+      const initialConfig = {
+        mcpServers: {
+          'custom-tool': {
+            command: 'tool-bin',
+            args: ['serve'],
+          },
+        },
+      };
+      writeFileSync(
+        join(tmpDir, '.agents', 'mcp_config.json'),
+        JSON.stringify(initialConfig, null, 2) + '\n',
+        'utf-8'
+      );
+
+      const result = await runCli(['init', '--harness', 'antigravity'], { cwd: tmpDir });
+      await expectSuccess(result);
+
+      const merged = JSON.parse(readFileSync(join(tmpDir, '.agents', 'mcp_config.json'), 'utf-8'));
+      expect(merged.mcpServers['custom-tool']).toEqual({
+        command: 'tool-bin',
+        args: ['serve'],
+      });
+      expect(merged.mcpServers.crewmate).toBeDefined();
+    });
+  });
+
   describe('invalid harness', () => {
     it('should fail with unknown harness', async () => {
       const result = await runCli(['init', '--harness', 'nonexistent'], { cwd: tmpDir });
@@ -235,6 +321,7 @@ describe('crewmate init', () => {
 
       const output = result.stdout + result.stderr;
       expect(output).toContain('opencode');
+      expect(output).toContain('antigravity');
     });
   });
 });

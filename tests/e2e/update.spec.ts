@@ -83,4 +83,16 @@ describe('crewmate update', () => {
     const content = await readFile(frontmanPath, 'utf-8');
     expect(content).toBe('# Modified Frontman\n');
   });
+
+  it('should auto-detect antigravity harness from manifest when updating', async () => {
+    await runCli(['init', '--harness', 'antigravity'], { cwd: tmpDir });
+
+    const updateRes = await runCli(['update'], { cwd: tmpDir });
+    await expectSuccess(updateRes);
+
+    expect(updateRes.stdout).toContain('Updated crewmate integration for antigravity');
+    const json = parseJsonOutput(updateRes.stdout);
+    expect(json.ok).toBe(true);
+    expect(json.harness).toBe('antigravity');
+  });
 });
