@@ -43,18 +43,15 @@ Then, inside the project you want to work on:
 
 ```bash
 cd ~/my-project
+
+# For OpenCode:
 crewmate init --harness opencode
+
+# For Antigravity IDE / Agent environment:
+crewmate init --harness antigravity
 ```
 
-This adds a few files under `.opencode/`:
-
-- `plugins/crewmate.ts` — hooks Crewmate's tools into OpenCode
-- `commands/brief.md` — the `/brief` command that starts the planning conversation
-- `commands/execute.md` — the `/execute` command that runs the plan
-- `agents/frontman.md` — the supervisor's prompt
-- `agents/scout.md` — the read-only codebase explorer's prompt
-- `agents/planner.md` — the task-breakdown agent's prompt
-- `agents/executor.md` — the implementer's prompt
+This sets up the required plugin, rule, workflow, and MCP integration files for your selected harness (under `.opencode/` or `.agents/plugins/crewmate/`).
 
 Crewmate keeps its own state in `.crewmate/crewmate.db` (SQLite) and records file checksums in `.crewmate/manifest.json`. Add `.crewmate/` to your `.gitignore`. It doesn't need to be checked in.
 

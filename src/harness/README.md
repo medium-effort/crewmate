@@ -6,20 +6,16 @@ The harness system lets Crewmate integrate with different AI coding assistants. 
 
 ```text
 harness/
-  types.ts                        Interface definitions (HarnessAdapter, InstallResult)
+  types.ts                        Interface definitions (HarnessAdapter, InstallResult, UpdateResult)
   registry.ts                     Adapter lookup and registration
+  manifest.ts                     Checksum manifest and backup management
   adapters/
     opencode/                     See adapters/opencode/README.md for details
       adapter.ts                  OpenCode adapter implementation
-      templates/
-        crewmate-plugin.ts        Plugin source template (TypeScript)
-        brief.md                  Markdown template for the /brief command
-        execute.md                Markdown template for the /execute command
-        agents/
-          Frontman.md             Primary orchestrator agent prompt
-          Scout.md                Read-only codebase explorer subagent prompt
-          Planner.md              Task decomposition subagent prompt
-          Executor.md             Implementation subagent prompt
+      templates/                  OpenCode plugin, commands, and agent templates
+    antigravity/                  Antigravity plugin harness adapter
+      adapter.ts                  Antigravity adapter implementation
+      templates/                  Antigravity plugin manifest, MCP server, hooks, rules, skills
 ```
 
 ### `HarnessAdapter` interface
@@ -109,3 +105,16 @@ For example, the OpenCode adapter writes into `.opencode/`:
 - `.opencode/package.json` — adds `@opencode-ai/plugin` as a dependency
 
 See [adapters/opencode/README.md](adapters/opencode/README.md) for OpenCode-specific details.
+
+Similarly, the Antigravity adapter encapsulates its integration into `.agents/plugins/crewmate/`:
+
+- `.agents/plugins/crewmate/plugin.json` — Antigravity plugin manifest
+- `.agents/plugins/crewmate/mcp_config.json` — auto-launches the Crewmate MCP server via `crewmate mcp`
+- `.agents/plugins/crewmate/hooks.json` — lifecycle hooks for event logging and continuous execution
+- `.agents/plugins/crewmate/rules/crewmate.md` — Frontman orchestrator guidelines and dashboard tracking
+- `.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md` — `/brief` workflow runbook
+- `.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md` — `/execute` continuous execution loop
+- `.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md` — Scout codebase discovery persona
+- `.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md` — Planner task decomposition persona
+- `.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md` — Executor task implementation & locking persona
+

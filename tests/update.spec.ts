@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getAdapter } from '../src/harness/registry.js';
-import { readManifest } from '../src/harness/manifest.js';
+import { readManifest, CREWMATE_VERSION } from '../src/harness/manifest.js';
 
 const TEST_PREFIX = 'crewmate-harness-update-';
 
@@ -29,7 +29,7 @@ describe('OpenCodeAdapter install and update', () => {
     const manifest = readManifest(tmpDir);
     expect(manifest).not.toBeNull();
     expect(manifest?.harness).toBe('opencode');
-    expect(manifest?.version).toBe('0.2.2');
+    expect(manifest?.version).toBe(CREWMATE_VERSION);
     expect(Object.keys(manifest!.files).length).toBe(result.filesWritten.length);
   });
 

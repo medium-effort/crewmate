@@ -122,10 +122,22 @@ describe('Workflow Snapshot Frontman State Derivation', () => {
 });
 
 describe('Frontman agent prompt rule adherence', () => {
+  const getFrontmanPath = async () => {
+    const { existsSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const templatePath = resolve(
+      process.cwd(),
+      'src/harness/adapters/opencode/templates/agents/frontman.md'
+    );
+    if (existsSync(templatePath)) return templatePath;
+    const installedPath = resolve(process.cwd(), '.opencode/agents/frontman.md');
+    if (existsSync(installedPath)) return installedPath;
+    return resolve(process.cwd(), '../.opencode/agents/frontman.md');
+  };
+
   it('verifies that .opencode/agents/frontman.md contains immediate state transition rules', async () => {
     const { readFile } = await import('node:fs/promises');
-    const { resolve } = await import('node:path');
-    const frontmanPath = resolve(process.cwd(), '../.opencode/agents/frontman.md');
+    const frontmanPath = await getFrontmanPath();
     const content = await readFile(frontmanPath, 'utf-8');
 
     // Rule: Transition away from questioning / awaiting_response immediately on receiving input
@@ -142,8 +154,7 @@ describe('Frontman agent prompt rule adherence', () => {
 
   it('verifies that .opencode/agents/frontman.md enforces streaming markdown tables before concise question prompts', async () => {
     const { readFile } = await import('node:fs/promises');
-    const { resolve } = await import('node:path');
-    const frontmanPath = resolve(process.cwd(), '../.opencode/agents/frontman.md');
+    const frontmanPath = await getFrontmanPath();
     const content = await readFile(frontmanPath, 'utf-8');
 
     // Rule: Question UX Formatting & chat stream
