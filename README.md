@@ -48,7 +48,7 @@ cd ~/my-project
 crewmate init --harness opencode
 
 # For Antigravity IDE / Agent environment:
-crewmate init --harness antigravity
+crewmate init --harness antigravity-ide
 ```
 
 This sets up the required plugin, rule, workflow, and MCP integration files for your selected harness (under `.opencode/` or `.agents/plugins/crewmate/`).

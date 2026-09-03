@@ -1,4 +1,12 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import {
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+  readdirSync,
+  rmdirSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import type {
   FileUpdateStatus,
@@ -19,8 +27,6 @@ import { PLUGIN_JSON } from './templates/plugin-json.js';
 import { MCP_CONFIG_JSON } from './templates/mcp-config-json.js';
 import { HOOKS_JSON } from './templates/hooks-json.js';
 import CREWMATE_RULE_MD from './templates/rules/crewmate.md';
-import BRIEF_SKILL_MD from './templates/skills/brief.md';
-import EXECUTE_SKILL_MD from './templates/skills/execute.md';
 import SCOUT_SKILL_MD from './templates/skills/scout.md';
 import PLANNER_SKILL_MD from './templates/skills/planner.md';
 import EXECUTOR_SKILL_MD from './templates/skills/executor.md';
@@ -34,8 +40,37 @@ import EXECUTE_WORKFLOW_MD from './templates/workflows/execute.md';
  * including slash command workflows, plugin manifest, embedded MCP server, lifecycle hooks, rules, and progressive skills.
  */
 export class AntigravityAdapter implements HarnessAdapter {
-  name = 'antigravity';
+  name = 'antigravity-ide';
   description = 'Antigravity AI coding assistant and agent environment';
+
+  /**
+   * Files installed by previous versions of the Antigravity integration that are now deprecated.
+   */
+  readonly deprecatedFiles: string[] = [
+    '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md',
+    '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md',
+  ];
+
+  /**
+   * Cleans up empty parent directories up to (but not including) .agents/
+   */
+  private cleanEmptyParentDirs(targetDir: string, relFilePath: string): void {
+    let currentDir = dirname(join(targetDir, relFilePath));
+    const stopDir = join(targetDir, '.agents');
+
+    while (currentDir.startsWith(stopDir) && currentDir !== stopDir) {
+      try {
+        if (existsSync(currentDir) && readdirSync(currentDir).length === 0) {
+          rmdirSync(currentDir);
+          currentDir = dirname(currentDir);
+        } else {
+          break;
+        }
+      } catch {
+        break;
+      }
+    }
+  }
 
   private generateMcpConfigJson(targetDir: string): string {
     const configPath = join(targetDir, '.agents', 'mcp_config.json');
@@ -73,8 +108,6 @@ export class AntigravityAdapter implements HarnessAdapter {
       '.agents/plugins/crewmate/mcp_config.json': MCP_CONFIG_JSON,
       '.agents/plugins/crewmate/hooks.json': HOOKS_JSON,
       '.agents/plugins/crewmate/rules/crewmate.md': CREWMATE_RULE_MD,
-      '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md': BRIEF_SKILL_MD,
-      '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md': EXECUTE_SKILL_MD,
       '.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md': SCOUT_SKILL_MD,
       '.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md': PLANNER_SKILL_MD,
       '.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md': EXECUTOR_SKILL_MD,
@@ -91,6 +124,16 @@ export class AntigravityAdapter implements HarnessAdapter {
     const filesWritten: string[] = [];
     const manifestEntries: Record<string, ManifestFileEntry> = {};
     const now = new Date().toISOString();
+
+    // Clean up any known deprecated files that exist on disk
+    for (const relPath of this.deprecatedFiles) {
+      const absPath = join(targetDir, relPath);
+      if (existsSync(absPath)) {
+        createBackup(targetDir, relPath);
+        rmSync(absPath, { force: true });
+        this.cleanEmptyParentDirs(targetDir, relPath);
+      }
+    }
 
     const templateFiles = this.getTemplateFiles();
     for (const [relPath, content] of Object.entries(templateFiles)) {
@@ -125,6 +168,7 @@ export class AntigravityAdapter implements HarnessAdapter {
    *
    * If existing files were modified by the user, creates backups in .crewmate/backups/
    * and updates them to the latest template versions.
+   * Deprecated or obsolete files are backed up to .crewmate/backups/ and removed from .agents/.
    *
    * @param targetDir - The target directory to update
    * @param options - Update options (force, dryRun, backup)
@@ -142,6 +186,7 @@ export class AntigravityAdapter implements HarnessAdapter {
     const fileStatuses: FileUpdateStatus[] = [];
     const backedUpFiles: string[] = [];
 
+    // 1. Process active template files (create, update, or unchanged)
     for (const [relPath, newContent] of Object.entries(templateFiles)) {
       const absPath = join(targetDir, relPath);
       const fileExists = existsSync(absPath);
@@ -197,6 +242,57 @@ export class AntigravityAdapter implements HarnessAdapter {
       });
     }
 
+    // 2. Process deprecated/obsolete files (backup and remove from .agents/)
+    const obsoleteFiles = new Set<string>(this.deprecatedFiles);
+    if (existingManifest?.files) {
+      for (const manifestRelPath of Object.keys(existingManifest.files)) {
+        if (
+          !templateFiles[manifestRelPath] &&
+          manifestRelPath !== '.agents/mcp_config.json' &&
+          (manifestRelPath.startsWith('.agents/plugins/crewmate/') ||
+            manifestRelPath.startsWith('.agents/workflows/'))
+        ) {
+          obsoleteFiles.add(manifestRelPath);
+        }
+      }
+    }
+
+    let removedCount = 0;
+    for (const relPath of obsoleteFiles) {
+      const absPath = join(targetDir, relPath);
+      const fileExists = existsSync(absPath);
+
+      if (fileExists) {
+        let backupPath: string | undefined;
+        if (options.backup !== false) {
+          if (!options.dryRun) {
+            backupPath = createBackup(targetDir, relPath);
+            if (backupPath) {
+              backedUpFiles.push(backupPath);
+            }
+          } else {
+            backupPath = `.crewmate/backups/<timestamp>/${relPath}`;
+            backedUpFiles.push(backupPath);
+          }
+        }
+
+        if (!options.dryRun) {
+          rmSync(absPath, { force: true });
+          this.cleanEmptyParentDirs(targetDir, relPath);
+        }
+
+        delete manifestEntries[relPath];
+        removedCount++;
+        fileStatuses.push({
+          path: relPath,
+          action: 'backed_up_and_removed',
+          ...(backupPath && { backupPath }),
+        });
+      } else if (manifestEntries[relPath]) {
+        delete manifestEntries[relPath];
+      }
+    }
+
     if (!options.dryRun) {
       writeManifest(targetDir, this.name, manifestEntries, existingManifest?.installedAt ?? now);
     }
@@ -209,6 +305,7 @@ export class AntigravityAdapter implements HarnessAdapter {
       ).length,
       unchanged: fileStatuses.filter((f) => f.action === 'unchanged').length,
       backedUp: backedUpFiles.length,
+      removed: removedCount,
     };
 
     return {

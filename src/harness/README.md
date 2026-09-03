@@ -111,9 +111,7 @@ Similarly, the Antigravity adapter encapsulates its integration into `.agents/pl
 - `.agents/plugins/crewmate/mcp_config.json` — auto-launches the Crewmate MCP server via `crewmate mcp`
 - `.agents/plugins/crewmate/hooks.json` — lifecycle hooks for event logging and continuous execution
 - `.agents/plugins/crewmate/rules/crewmate.md` — Frontman orchestrator guidelines and dashboard tracking
-- `.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md` — `/brief` workflow runbook
-- `.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md` — `/execute` continuous execution loop
-- `.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md` — Scout codebase discovery persona
-- `.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md` — Planner task decomposition persona
-- `.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md` — Executor task implementation & locking persona
+- `.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md` — Scout codebase discovery protocol
+- `.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md` — Planner task decomposition protocol
+- `.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md` — Executor task implementation & locking protocol
 

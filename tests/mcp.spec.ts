@@ -246,7 +246,11 @@ describe('Crewmate MCP Server', () => {
       // List Events
       const listEventsRes = await executeTool('crewmate_list_events', { briefId }, db);
       expect(listEventsRes.ok).toBe(true);
-      expect((listEventsRes.events as unknown[]).length).toBe(1);
+      const events = listEventsRes.events as Array<{ type: string; message: string }>;
+      expect(events.length).toBe(4);
+      expect(events.some((e) => e.type === 'locked')).toBe(true);
+      expect(events.some((e) => e.type === 'artifact')).toBe(true);
+      expect(events.some((e) => e.type === 'started')).toBe(true);
 
       // Set Activity
       const setActivityRes = await executeTool(
@@ -270,6 +274,27 @@ describe('Crewmate MCP Server', () => {
       // Remove Task
       const removeTaskRes = await executeTool('crewmate_remove_task', { taskId }, db);
       expect(removeTaskRes.ok).toBe(true);
+    });
+
+    it('should allow crewmate_add_task and crewmate_list_tasks without briefId', async () => {
+      const createRes = await executeTool('crewmate_create_brief', {}, db);
+      expect(createRes.id).toBeDefined();
+
+      const addTaskRes = await executeTool(
+        'crewmate_add_task',
+        {
+          title: 'Auto-resolved Task',
+          description: 'Task added without explicit briefId',
+        },
+        db
+      );
+      expect(addTaskRes.ok).toBe(true);
+
+      const listRes = await executeTool('crewmate_list_tasks', {}, db);
+      expect(listRes.ok).toBe(true);
+      expect(
+        (listRes.tasks as Array<{ title: string }>).some((t) => t.title === 'Auto-resolved Task')
+      ).toBe(true);
     });
 
     it('should throw on unknown tool', async () => {
@@ -329,7 +354,7 @@ describe('Crewmate MCP Server', () => {
       const dbA = getDb(tmpProjectA);
       const briefA = getBriefById(briefId, dbA);
       expect(briefA).toBeDefined();
-      expect(briefA?.goal).toBe('Project A goal with sticky context');
+      expect(briefA?.fields?.goal).toBe('Project A goal with sticky context');
 
       const tasksA = listTasksByBrief(dbA, briefId);
       expect(tasksA.length).toBe(1);
@@ -383,7 +408,7 @@ describe('Crewmate MCP Server', () => {
       // Verify Project A DB
       const dbA = getDb(tmpProjectA);
       const briefA = getBriefById(briefAId, dbA);
-      expect(briefA?.goal).toBe('Goal for Project A');
+      expect(briefA?.fields?.goal).toBe('Goal for Project A');
       const tasksA = listTasksByBrief(dbA, briefAId);
       expect(tasksA.length).toBe(1);
       expect(tasksA[0].status).toBe('in_progress');
@@ -391,7 +416,7 @@ describe('Crewmate MCP Server', () => {
       // Verify Project B DB
       const dbB = getDb(tmpProjectB);
       const briefB = getBriefById(briefBId, dbB);
-      expect(briefB?.goal).toBe('Goal for Project B');
+      expect(briefB?.fields?.goal).toBe('Goal for Project B');
       const tasksB = listTasksByBrief(dbB, briefBId);
       expect(tasksB.length).toBe(1);
       expect(tasksB[0].status).toBe('pending');

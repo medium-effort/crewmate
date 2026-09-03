@@ -4,40 +4,132 @@ description: Initiate or refine a Crewmate project brief, gather requirements in
 
 # /brief Workflow
 
-Step-by-step instructions for initiating or refining a Crewmate project brief, gathering requirements interactively, verifying completeness, and decomposing tasks.
+This workflow guides the user through structured, conversational requirement gathering, codebase discovery, and task decomposition.
 
-## Workflow Steps
+> [!IMPORTANT]
+> **Pacing & Turn Invariant**: Never combine multiple phases into a single turn! The agent must stop, render chat output, and yield to the user at each phase gate. Do not greedily execute ahead.
 
-### 1. Initialize Brief
-1. Call `crewmate_create_brief(projectPath: "<active_workspace_path>")` to create a new brief (or view the active one with `crewmate_show_brief(projectPath: "<active_workspace_path>")`). The server binds this workspace path for all subsequent tool calls in the session.
-2. Update activity: `crewmate_set_activity(activityType: "analyzing", message: "Inspecting repository context")`.
+---
 
-### 2. Codebase Discovery
-1. Follow the `crewmate-scout` skill to inspect existing project manifests, dependencies, architecture, and conventions.
-2. Report objective facts to the user without prescribing architectural decisions.
+## Workflow Phases
 
-### 3. Interactive Requirement Gathering
-1. Update activity: `crewmate_set_activity(activityType: "questioning", message: "Gathering brief requirements")`.
-2. Use `ask_question` to gather required fields:
-   - `workType`: `software` | `infrastructure` | `data` | `documentation` | `audit`
-   - `goal`: Clear summary of the objective
-   - `scope`: `{"included": [...], "excluded": [...]}`
-   - `functionalRequirements`: Array of requirements
-   - `acceptanceCriteria`: Array of acceptance criteria
-3. Persist each field with `crewmate_update_field`.
-4. Discuss and set optional fields: `technicalStack`, `constraints`, `qualityStandards`, `dependencies`, `risks`, `deliverables`.
+### Phase 1: Core Goal & Scope Formulation
+1. **Initialize**: Call `crewmate_create_brief(projectPath: "<active_workspace_path>")` (or retrieve active brief via `crewmate_show_brief`).
+2. **Set Initial Activity**: `crewmate_set_activity(activityType: "questioning", message: "Formulating project goal & scope")`.
+3. **Extract & Persist Basics**:
+   - Determine `workType` (`software` | `infrastructure` | `data` | `documentation` | `audit`).
+   - Determine `goal` (clear 1-2 sentence statement).
+   - Persist both via `crewmate_update_field`.
+4. **Print Proposed Scope to Chat & Yield with Question**:
+   - **MANDATORY VISIBLE CHAT TEXT**: You MUST print the complete proposed scope into the conversation response (do NOT leave it in your thinking block!):
+     ```markdown
+     ### 🎯 Proposed Project Scope
 
-### 4. Verify & Complete Brief
-1. Call `crewmate_check_status` to verify that all required fields are set.
-2. If incomplete, prompt the user for remaining fields.
-3. Once complete, call `crewmate_finish_brief`.
+     **Included:**
+     - [Deliverable / feature 1]
+     - [Deliverable / feature 2]
 
-### 5. Task Decomposition
-1. Follow the `crewmate-planner` skill to break the brief into dependency-ordered implementation tasks.
-2. Update activity: `crewmate_set_activity(activityType: "planning", message: "Decomposing brief into tasks")`.
-3. Prompt for user confirmation via `ask_question`:
-   - Format the proposed tasks inside the `question` field as a clean, vertical numbered list (Task #, Title, 1-line description, Dependencies). Do NOT use markdown tables inside `ask_question` because the modal dialog is too narrow.
-   - Provide standard approval options (`(Recommended) Approve and register tasks`, `Adjust the task breakdown`).
-4. On approval, persist each task using `crewmate_add_task`.
-5. Display the final registered task list table using `crewmate_list_tasks` in your final chat response.
-6. Update activity: `crewmate_set_activity(activityType: "idle", message: "Briefing complete")`.
+     **Excluded:**
+     - [Out-of-scope item 1]
+     - [Out-of-scope item 2]
+     ```
+   - In the exact same response turn, invoke `ask_question` with a compact question:
+     - Question: `"Do you accept this proposed scope for the project?"`
+     - Options:
+       - `(Recommended) Accept scope as proposed`
+       - `I want to adjust the scope (specify in write-in)`
+   - > [!WARNING]
+   - > Never call `ask_question` without first printing the `### 🎯 Proposed Project Scope` markdown block to chat. The user cannot see the contents of your private thinking block.
+5. **STOP AND YIELD TO USER**: Wait for the user's response before continuing.
+
+---
+
+### Phase 2: Functional Requirements & Acceptance Criteria
+1. **Persist Scope**: Call `crewmate_update_field(field: "scope", value: "...")` with the agreed JSON object.
+2. **Print Requirements & Criteria to Chat & Yield with Question**:
+   - **MANDATORY VISIBLE CHAT TEXT**: Print the proposed numbered list of `functionalRequirements` and `acceptanceCriteria` in your chat message response.
+   - In the exact same turn, call `ask_question` with a compact question:
+     - Question: `"Do you accept these functional requirements and acceptance criteria?"`
+     - Options:
+       - `(Recommended) Accept requirements and criteria as listed`
+       - `I want to modify the requirements or criteria`
+3. **STOP AND YIELD TO USER**: Wait for the user's response before continuing.
+
+---
+
+### Phase 3: Status Check & Discovery Offer
+1. **Persist Requirements & Criteria**:
+   - Persist `functionalRequirements` (JSON array of strings) via `crewmate_update_field`.
+   - Persist `acceptanceCriteria` (JSON array of strings) via `crewmate_update_field`.
+2. **Check Completeness**: Call `crewmate_check_status`.
+3. **Print Status Summary Table to Chat & Offer Discovery**:
+   - **MANDATORY VISIBLE CHAT TEXT**: Print the full-width status table in your chat message response:
+     ```markdown
+     | Required Field | Status | Summary |
+     |---|---|---|
+     | workType | ✓ set | [value] |
+     | goal | ✓ set | [value] |
+     | scope | ✓ set | [count] included, [count] excluded |
+     | functionalRequirements | ✓ set | [count] requirements |
+     | acceptanceCriteria | ✓ set | [count] criteria |
+     ```
+   - In the exact same turn, prompt the user via `ask_question` with a compact question:
+     - Question: `"How would you like to proceed with optional brief fields?"`
+     - Options:
+       - `(Recommended) Dispatch Scout for workspace discovery`
+       - `Finalize brief now with required fields only`
+       - `Provide optional fields manually`
+4. **STOP AND YIELD TO USER**: Wait for the user's response before continuing.
+
+---
+
+### Phase 4: Codebase Discovery & Optional Fields (If Scout Selected)
+1. **Set Activity**: `crewmate_set_activity(activityType: "analyzing", message: "Scout workspace discovery")`.
+2. **Execute Discovery**: Follow the `crewmate-scout` skill protocol. Inspect manifests, directory structure, tooling, and configs.
+3. **Print Report**: Render the dedicated findings card in chat (`### 🔍 Scout Codebase Findings`).
+4. **Print Proposed Optional Fields & Yield with Question**:
+   - Present proposed values for `technicalStack`, `constraints`, `deliverables`, `qualityStandards`, etc. in chat message text (`content`).
+   - Group complex fields using clear categories matching their schema (or simple lists, which Crewmate automatically normalizes):
+     - `technicalStack`: Sub-categories like `frontend`, `backend`, `database`, `tools` (or custom stack keys).
+     - `constraints`: Sub-categories for `requirements` and `exclusions`.
+     - `deliverables`: Items specifying `type` (`code` | `doc` | `report`) and `format` description.
+     - `qualityStandards`: Sub-categories for `testing`, `performance`, `security` (or general standards).
+   - In the exact same turn, call `ask_question` with a compact question:
+     - Question: `"Do you want to persist these optional fields to the brief?"`
+     - Options:
+       - `(Recommended) Persist optional fields as proposed`
+       - `Adjust optional fields (specify in write-in)`
+       - `Skip optional fields and proceed to finalize`
+5. **STOP AND YIELD TO USER**: Wait for the user's response before continuing.
+
+---
+
+### Phase 5: Finalize Brief & Propose Task Decomposition
+1. **Persist Optional Fields**: Persist agreed optional fields via `crewmate_update_field`.
+2. **Finalize**: Call `crewmate_check_status`, then `crewmate_finish_brief`.
+3. **Set Activity**: `crewmate_set_activity(activityType: "planning", message: "Decomposing brief into tasks")`.
+4. **Decompose Tasks**: Follow the `crewmate-planner` skill protocol to break the brief into discrete, dependency-ordered tasks.
+5. **Print Task Breakdown Table to Chat & Yield with Question**:
+   - **MANDATORY VISIBLE CHAT TEXT**: Print the complete task breakdown table in your chat message response:
+     ```markdown
+     ### 📋 Proposed Task Breakdown
+
+     | # | Task Title | Description | Dependencies | Addresses Field |
+     |---|---|---|---|---|
+     | 1 | [Title] | [Brief work description] | None | [field] |
+     | 2 | [Title] | [Brief work description] | Task 1 | [field] |
+     ```
+   - In the exact same turn, call `ask_question` with a compact question referencing the table above:
+     - Question: `"Do you approve the implementation task breakdown above?"`
+     - Options:
+       - `(Recommended) Approve task breakdown and register tasks`
+       - `Adjust task breakdown (specify in write-in)`
+6. **STOP AND YIELD TO USER**: Wait for the user's response before continuing.
+
+---
+
+### Phase 6: Task Registration & Next Steps
+1. **Register Tasks**: On user approval, sequentially call `crewmate_add_task` for each task (passing `title`, `description`, `dependencies` with returned task IDs; `briefId` defaults automatically to the active brief).
+2. **Display Final Registry**: Call `crewmate_list_tasks` and render the registered task table in your chat response.
+3. **Set Activity**: `crewmate_set_activity(activityType: "idle", message: "Briefing complete")`.
+4. **Next Step**: Inform the user that the brief and tasks are ready, and they can run `/execute` whenever ready.

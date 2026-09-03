@@ -8,6 +8,11 @@ const DB_FILE = 'crewmate.db';
 
 const dbCache = new Map<string, Database.Database>();
 
+/**
+ * Returns all project roots currently held in the database cache.
+ *
+ * @returns Array of absolute paths to cached project roots.
+ */
 export function getCachedProjectRoots(): string[] {
   return Array.from(dbCache.keys());
 }
@@ -78,6 +83,9 @@ export function getDb(targetDir?: string): Database.Database {
   return connection;
 }
 
+/**
+ * Closes all open SQLite database connections in the cache.
+ */
 export function closeDb(): void {
   for (const [, connection] of dbCache.entries()) {
     try {

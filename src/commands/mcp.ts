@@ -32,11 +32,19 @@ import {
   getMissingRequiredFields,
   isBriefComplete,
 } from '../utils/validation.js';
-import { BRIEF_FIELDS, type BriefField } from '../models/brief.js';
+import type { BriefField } from '../models/brief.js';
 import { TASK_STATUSES, type TaskStatus } from '../models/task.js';
 import { ARTIFACT_TYPES, type ArtifactType } from '../models/artifact.js';
 import { EVENT_ACTORS, EVENT_TYPES, type EventActor, type EventType } from '../models/event.js';
 import { FRONTMAN_ACTIVITIES, type FrontmanActivityType } from '../models/activity.js';
+
+const DEFAULT_REQUIRED_FIELDS = [
+  'workType',
+  'goal',
+  'scope',
+  'functionalRequirements',
+  'acceptanceCriteria',
+];
 
 export const MCP_TOOLS = [
   {
@@ -63,7 +71,6 @@ export const MCP_TOOLS = [
       properties: {
         field: {
           type: 'string',
-          enum: [...BRIEF_FIELDS],
           description: 'Field name to update',
         },
         value: {
@@ -91,7 +98,6 @@ export const MCP_TOOLS = [
       properties: {
         field: {
           type: 'string',
-          enum: [...BRIEF_FIELDS],
           description: 'Field name to retrieve',
         },
         id: {
@@ -166,11 +172,14 @@ export const MCP_TOOLS = [
   {
     name: 'crewmate_add_task',
     description:
-      'Add a new task to a brief. REQUIRED: briefId, description. Optional: title, dependencies, field.',
+      'Add a new task to a brief. REQUIRED: description. Optional: briefId (defaults to active brief), title, dependencies, field.',
     inputSchema: {
       type: 'object',
       properties: {
-        briefId: { type: 'string', description: 'The brief ID to link this task to' },
+        briefId: {
+          type: 'string',
+          description: 'The brief ID to link this task to (defaults to active brief)',
+        },
         description: { type: 'string', description: 'Task description' },
         title: {
           type: 'string',
@@ -188,16 +197,19 @@ export const MCP_TOOLS = [
             'Optional path to the project root directory (defaults to active project context)',
         },
       },
-      required: ['briefId', 'description'],
+      required: ['description'],
     },
   },
   {
     name: 'crewmate_list_tasks',
-    description: 'List all tasks for a brief. REQUIRED: briefId.',
+    description: 'List all tasks for a brief. Optional: briefId (defaults to active brief).',
     inputSchema: {
       type: 'object',
       properties: {
-        briefId: { type: 'string', description: 'The brief ID to list tasks for' },
+        briefId: {
+          type: 'string',
+          description: 'The brief ID to list tasks for (defaults to active brief)',
+        },
         projectPath: {
           type: 'string',
           description:
@@ -482,15 +494,19 @@ export function resolveDbForTool(
   }
 
   const briefId = args.briefId ? String(args.briefId) : args.id ? String(args.id) : undefined;
-  if (briefId && briefProjectMap.has(briefId)) {
-    const root = briefProjectMap.get(briefId)!;
-    return { db: getDb(root), projectRoot: root };
+  if (briefId) {
+    const root = briefProjectMap.get(briefId);
+    if (root) {
+      return { db: getDb(root), projectRoot: root };
+    }
   }
 
   const taskId = args.taskId ? String(args.taskId) : undefined;
-  if (taskId && taskProjectMap.has(taskId)) {
-    const root = taskProjectMap.get(taskId)!;
-    return { db: getDb(root), projectRoot: root };
+  if (taskId) {
+    const root = taskProjectMap.get(taskId);
+    if (root) {
+      return { db: getDb(root), projectRoot: root };
+    }
   }
 
   const root = activeProjectRoot ?? findProjectRoot(process.cwd());
@@ -573,8 +589,15 @@ export async function executeTool(
       if (!b) {
         throw new Error(id ? `Brief not found: ${id}` : 'No brief found');
       }
-      const required = getRequiredFieldStatuses(b);
-      const complete = isBriefComplete(b);
+      const reqList = Array.isArray(args.requiredFields)
+        ? (args.requiredFields as string[])
+        : args.requiredFields
+          ? String(args.requiredFields)
+              .split(',')
+              .map((s) => s.trim())
+          : DEFAULT_REQUIRED_FIELDS;
+      const required = getRequiredFieldStatuses(b, reqList);
+      const complete = isBriefComplete(b, reqList);
       return { ok: true, status: b.status, required, complete };
     }
 
@@ -584,7 +607,14 @@ export async function executeTool(
       if (!b) {
         throw new Error(id ? `Brief not found: ${id}` : 'No brief found');
       }
-      const missing = getMissingRequiredFields(b);
+      const reqList = Array.isArray(args.requiredFields)
+        ? (args.requiredFields as string[])
+        : args.requiredFields
+          ? String(args.requiredFields)
+              .split(',')
+              .map((s) => s.trim())
+          : DEFAULT_REQUIRED_FIELDS;
+      const missing = getMissingRequiredFields(b, reqList);
       if (missing.length > 0) {
         throw new Error(`Missing required fields: ${missing.join(', ')}`);
       }
@@ -593,7 +623,7 @@ export async function executeTool(
     }
 
     case 'crewmate_add_task': {
-      const briefId = String(args.briefId || '');
+      const id = args.briefId ? String(args.briefId) : undefined;
       const description = String(args.description || '');
       const title = args.title ? String(args.title).trim() : '';
       const dependencies = Array.isArray(args.dependencies) ? (args.dependencies as string[]) : [];
@@ -602,10 +632,11 @@ export async function executeTool(
       if (!description.trim()) {
         throw new Error('description is required');
       }
-      const brief = getBriefById(briefId, db);
+      const brief = resolveBrief(id, db);
       if (!brief) {
-        throw new Error(`Brief not found: ${briefId}`);
+        throw new Error(id ? `Brief not found: ${id}` : 'No brief found');
       }
+      const briefId = brief.id;
 
       if (dependencies.length > 0) {
         const depCheck = validateDependencies(db, briefId, dependencies);
@@ -615,7 +646,7 @@ export async function executeTool(
       }
 
       if (field && !isValidField(field)) {
-        throw new Error(`Invalid field "${field}". Must be one of: ${BRIEF_FIELDS.join(', ')}`);
+        throw new Error(`Invalid field "${field}"`);
       }
 
       const taskTitle = title || description.trim().split(/\r?\n/)[0].slice(0, 80);
@@ -630,14 +661,12 @@ export async function executeTool(
     }
 
     case 'crewmate_list_tasks': {
-      const briefId = String(args.briefId || '');
-      if (!briefId) {
-        throw new Error('briefId is required');
-      }
-      const brief = getBriefById(briefId, db);
+      const id = args.briefId ? String(args.briefId) : undefined;
+      const brief = resolveBrief(id, db);
       if (!brief) {
-        throw new Error(`Brief not found: ${briefId}`);
+        throw new Error(id ? `Brief not found: ${id}` : 'No brief found');
       }
+      const briefId = brief.id;
       const tasks = listTasksByBrief(db, briefId);
       return {
         ok: true,
@@ -677,6 +706,15 @@ export async function executeTool(
       }
 
       updateTaskStatus(db, taskId, status);
+      if (status === 'in_progress') {
+        createEvent(db, task.briefId, 'executor', 'started', `Started task: ${task.title}`, {
+          taskId: task.id,
+        });
+      } else if (status === 'completed') {
+        createEvent(db, task.briefId, 'executor', 'completed', `Completed task: ${task.title}`, {
+          taskId: task.id,
+        });
+      }
       return { ok: true, id: task.id, status, title: task.title };
     }
 
@@ -707,6 +745,14 @@ export async function executeTool(
       if (!result.ok) {
         throw new Error(`File already locked by task ${result.lockedBy}: ${result.conflict}`);
       }
+      createEvent(
+        db,
+        task.briefId,
+        'executor',
+        'locked',
+        `Locked ${result.locked.length} file(s) for task: ${task.title}`,
+        { taskId: task.id }
+      );
       return { ok: true, taskId, files: result.locked };
     }
 
@@ -765,6 +811,14 @@ export async function executeTool(
       }
 
       const artifact = createArtifact(db, taskId, briefId, type, content);
+      createEvent(
+        db,
+        briefId,
+        'executor',
+        'artifact',
+        `Added ${type} artifact for task: ${task.title}`,
+        { taskId: task.id }
+      );
       return {
         ok: true,
         id: artifact.id,
@@ -961,6 +1015,12 @@ export async function executeTool(
         message,
         metadata: (args.metadata as Record<string, unknown>) ?? null,
       });
+
+      if (['analyzing', 'planning', 'orchestrating'].includes(activityType)) {
+        const actor = activityType === 'orchestrating' ? 'executor' : 'frontman';
+        const msg = message || `Activity changed to ${activityType}`;
+        createEvent(db, targetBriefId, actor, 'started', msg);
+      }
 
       return { ok: true, activity };
     }

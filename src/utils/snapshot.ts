@@ -2,6 +2,8 @@
  * Workflow snapshot builder — reads current state from the database and
  * derives a view for the live dashboard.
  */
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { getDb } from '../db/connection.js';
 import type Database from 'better-sqlite3';
 import { resolveBrief } from '../db/brief-repo.js';
@@ -370,7 +372,13 @@ export function buildSnapshot(
     currentActivity,
     isSessionActive,
     sessionStatus,
-    harness: session?.harness,
+    harness:
+      session?.harness ||
+      (existsSync(join(process.cwd(), '.agents'))
+        ? 'antigravity-ide'
+        : existsSync(join(process.cwd(), '.opencode'))
+          ? 'opencode'
+          : undefined),
     workflowRun,
   };
 }

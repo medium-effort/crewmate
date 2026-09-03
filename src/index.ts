@@ -12,6 +12,7 @@ import { registerWatchCommand } from './commands/watch.js';
 import { registerSessionCommand } from './commands/session.js';
 import { registerWorkflowCommands } from './commands/workflow.js';
 import { registerMcpCommand } from './commands/mcp.js';
+import { registerHookCommand } from './commands/hook.js';
 
 const program = new Command();
 
@@ -29,5 +30,6 @@ registerWatchCommand(program);
 registerSessionCommand(program);
 registerWorkflowCommands(program);
 registerMcpCommand(program);
+registerHookCommand(program);
 
 program.parse();

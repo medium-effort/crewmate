@@ -4,7 +4,7 @@
  */
 
 import type { EventActor } from '../models/event.js';
-import type { FrontmanActivity } from '../models/activity.js';
+import type { FrontmanActivity, FrontmanActivityType } from '../models/activity.js';
 import { SPINNERS } from './ascii.js';
 import { easeInOutCubic } from './animation.js';
 
@@ -96,6 +96,43 @@ const AGENT_COLORS = {
   executor: 'green',
 } as const;
 
+interface SkillChannelConfig {
+  actor: EventActor;
+  skillLabel: string;
+  skillAction: string;
+  defaultAction: string;
+}
+
+const SKILL_CHANNELS: Partial<Record<FrontmanActivityType, SkillChannelConfig>> = {
+  analyzing: {
+    actor: 'scout',
+    skillLabel: 'Scout',
+    skillAction: 'analyzing codebase architecture',
+    defaultAction: 'analyzing requirements',
+  },
+  planning: {
+    actor: 'planner',
+    skillLabel: 'Planner',
+    skillAction: 'decomposing brief & dependency graph',
+    defaultAction: 'planning tasks',
+  },
+  orchestrating: {
+    actor: 'executor',
+    skillLabel: 'Executor',
+    skillAction: 'executing task implementation',
+    defaultAction: 'orchestrating subagents',
+  },
+};
+
+const STANDARD_ACTIVITIES: Partial<
+  Record<FrontmanActivityType, { color: string; desc: string; withSpinner: boolean }>
+> = {
+  questioning: { color: 'cyan', desc: 'asking user question', withSpinner: true },
+  awaiting_response: { color: 'cyan', desc: 'awaiting user response', withSpinner: true },
+  reviewing: { color: 'gray', desc: 'reviewing progress', withSpinner: true },
+  idle: { color: 'gray', desc: 'idle · waiting for dispatch', withSpinner: false },
+};
+
 /**
  * Renders a colored agent node.
  * When spinnerFrame is provided, renders an animated loading spinner (⠋ ⠙ ...).
@@ -135,6 +172,40 @@ export function buildRailSegment(totalChars: number, progress: number, charSet: 
   const pos = Math.round(Math.max(0, Math.min(1, progress)) * (totalChars - 1));
   let rail = '';
 
+  for (let i = 0; i < totalChars; i++) {
+    if (i === pos) {
+      rail += charSet.dot;
+    } else {
+      rail += charSet.rail;
+    }
+  }
+
+  return rail;
+}
+
+/**
+ * Builds a short bouncing rail segment where the dot moves back and forth.
+ *
+ * @param totalChars Total number of characters in the rail (default 5 for ──_──)
+ * @param frame Current animation frame
+ * @param charSet Character set to use
+ * @returns Formatted string representing the rail with bouncing dot
+ */
+export function buildBouncingRailSegment(
+  totalChars: number,
+  frame: number | undefined,
+  charSet: CharSet
+): string {
+  const span = Math.max(1, totalChars - 1);
+  const cycle = span * 2;
+  const pos =
+    frame !== undefined
+      ? frame % cycle <= span
+        ? frame % cycle
+        : cycle - (frame % cycle)
+      : Math.floor(totalChars / 2);
+
+  let rail = '';
   for (let i = 0; i < totalChars; i++) {
     if (i === pos) {
       rail += charSet.dot;
@@ -265,46 +336,40 @@ export function renderGraph(options: GraphRenderOptions): string {
     let frontmanNode = buildAgentNode('frontman', charSet);
 
     if (options.sessionStatus === 'stopped' || options.sessionStatus === 'offline') {
-      frontmanNode = buildAgentNode('frontman', charSet);
       const harnessLabel = options.harnessName
         ? `${options.harnessName} disconnected`
         : 'harness disconnected';
       stateDescription = `{yellow-fg}── (offline · ${harnessLabel}){/yellow-fg}`;
     } else if (options.sessionStatus === 'idle') {
-      frontmanNode = buildAgentNode('frontman', charSet);
       stateDescription = '{yellow-fg}── (idle · session paused / waiting for input){/yellow-fg}';
     } else if (activity) {
       const msgSuffix = activity.message ? `: ${activity.message}` : '';
-      switch (activity.activityType) {
-        case 'questioning':
-          frontmanNode = buildAgentNode('frontman', charSet, spinnerFrame);
-          stateDescription = `{cyan-fg}── (asking user question${msgSuffix}){/cyan-fg}`;
-          break;
-        case 'awaiting_response':
-          frontmanNode = buildAgentNode('frontman', charSet, spinnerFrame);
-          stateDescription = `{cyan-fg}── (awaiting user response${msgSuffix}){/cyan-fg}`;
-          break;
-        case 'analyzing':
-          frontmanNode = buildAgentNode('frontman', charSet, spinnerFrame);
-          stateDescription = `{gray-fg}── (analyzing requirements${msgSuffix}){/gray-fg}`;
-          break;
-        case 'planning':
-          frontmanNode = buildAgentNode('frontman', charSet, spinnerFrame);
-          stateDescription = `{gray-fg}── (planning tasks${msgSuffix}){/gray-fg}`;
-          break;
-        case 'orchestrating':
-          frontmanNode = buildAgentNode('frontman', charSet, spinnerFrame);
-          stateDescription = `{gray-fg}── (orchestrating subagents${msgSuffix}){/gray-fg}`;
-          break;
-        case 'reviewing':
-          frontmanNode = buildAgentNode('frontman', charSet, spinnerFrame);
-          stateDescription = `{gray-fg}── (reviewing progress${msgSuffix}){/gray-fg}`;
-          break;
-        case 'idle':
-        default:
-          frontmanNode = buildAgentNode('frontman', charSet);
-          stateDescription = `{gray-fg}── (idle · waiting for dispatch${msgSuffix}){/gray-fg}`;
-          break;
+      const channel = SKILL_CHANNELS[activity.activityType];
+
+      if (
+        channel &&
+        (options.harnessName === 'antigravity' || options.harnessName === 'antigravity-ide')
+      ) {
+        const linkRail = buildBouncingRailSegment(5, spinnerFrame, charSet);
+        const color = AGENT_COLORS[channel.actor];
+        const spinner =
+          spinnerFrame !== undefined && charSet === CHAR_SETS.unicode
+            ? `{${color}-fg}${SPINNERS[spinnerFrame % SPINNERS.length]}{/${color}-fg} `
+            : '';
+        const trailRail = `${charSet.rail}${charSet.rail}`;
+        stateDescription = `${linkRail} {${color}-fg}[Skill: ${channel.skillLabel}]{/${color}-fg} {${color}-fg}${trailRail} (${spinner}${channel.skillAction}${msgSuffix}){/${color}-fg}`;
+      } else {
+        const standard = STANDARD_ACTIVITIES[activity.activityType] ?? {
+          color: 'gray',
+          desc: channel?.defaultAction ?? 'idle · waiting for dispatch',
+          withSpinner: Boolean(channel),
+        };
+        frontmanNode = buildAgentNode(
+          'frontman',
+          charSet,
+          standard.withSpinner ? spinnerFrame : undefined
+        );
+        stateDescription = `{${standard.color}-fg}── (${standard.desc}${msgSuffix}){/${standard.color}-fg}`;
       }
     } else if (frontmanState === 'asking') {
       frontmanNode = buildAgentNode('frontman', charSet, spinnerFrame);

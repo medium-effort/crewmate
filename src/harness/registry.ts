@@ -22,18 +22,26 @@ import { AntigravityAdapter } from './adapters/antigravity/adapter.js';
  * ```
  */
 
+const antigravityAdapter = new AntigravityAdapter();
+
 const adapters: Record<string, HarnessAdapter> = {
   opencode: new OpenCodeAdapter(),
-  antigravity: new AntigravityAdapter(),
+  'antigravity-ide': antigravityAdapter,
+};
+
+// Fallback aliases for backward compatibility
+const aliases: Record<string, string> = {
+  antigravity: 'antigravity-ide',
 };
 
 /**
- * Get a specific adapter by name
+ * Get a specific adapter by name, with fallback alias support
  * @param name - The adapter identifier
  * @returns The adapter instance, or undefined if not found
  */
 export function getAdapter(name: string): HarnessAdapter | undefined {
-  return adapters[name];
+  const resolvedName = aliases[name] ?? name;
+  return adapters[resolvedName];
 }
 
 /**
@@ -45,18 +53,19 @@ export function listAdapters(): HarnessAdapter[] {
 }
 
 /**
- * Get names of all registered adapters
+ * Get names of all registered adapters (including backward-compatible aliases)
  * @returns Array of adapter identifiers
  */
 export function listAdapterNames(): string[] {
-  return Object.keys(adapters);
+  return [...Object.keys(adapters), ...Object.keys(aliases)];
 }
 
 /**
- * Check if an adapter is registered
+ * Check if an adapter is registered (including aliases)
  * @param name - The adapter identifier to check
  * @returns true if the adapter exists, false otherwise
  */
 export function hasAdapter(name: string): boolean {
-  return name in adapters;
+  const resolvedName = aliases[name] ?? name;
+  return resolvedName in adapters;
 }

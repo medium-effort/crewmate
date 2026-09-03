@@ -224,13 +224,13 @@ describe('crewmate init', () => {
   });
 
   describe('antigravity harness', () => {
-    it('should create .agents/plugins/crewmate/ files and manifest', async () => {
-      const result = await runCli(['init', '--harness', 'antigravity'], { cwd: tmpDir });
+    it('should create .agents/plugins/crewmate/ files and manifest with --harness antigravity-ide', async () => {
+      const result = await runCli(['init', '--harness', 'antigravity-ide'], { cwd: tmpDir });
       await expectSuccess(result);
 
       const output = parseJsonOutput(result.stdout) as Record<string, unknown>;
       expect(output.ok).toBe(true);
-      expect(output.harness).toBe('antigravity');
+      expect(output.harness).toBe('antigravity-ide');
       expect(Array.isArray(output.filesWritten)).toBe(true);
       expect(output.filesWritten).toContain('.agents/mcp_config.json');
       expect(output.filesWritten).toContain('.agents/workflows/brief.md');
@@ -239,12 +239,6 @@ describe('crewmate init', () => {
       expect(output.filesWritten).toContain('.agents/plugins/crewmate/mcp_config.json');
       expect(output.filesWritten).toContain('.agents/plugins/crewmate/hooks.json');
       expect(output.filesWritten).toContain('.agents/plugins/crewmate/rules/crewmate.md');
-      expect(output.filesWritten).toContain(
-        '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md'
-      );
-      expect(output.filesWritten).toContain(
-        '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md'
-      );
       expect(output.filesWritten).toContain(
         '.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md'
       );
@@ -307,6 +301,27 @@ describe('crewmate init', () => {
       });
       expect(merged.mcpServers.crewmate).toBeDefined();
     });
+
+    it('should print reload window reminder for Antigravity IDE in human-readable output', async () => {
+      const result = await runCli(['init', '--harness', 'antigravity-ide'], { cwd: tmpDir });
+      await expectSuccess(result);
+
+      expect(result.stdout).toContain('Initialized crewmate integration for antigravity-ide');
+      expect(result.stdout).toContain('Antigravity IDE');
+      expect(result.stdout).toContain('reload the window to apply changes');
+      expect(result.stdout).toContain('Developer: Reload Window');
+    });
+
+    it('should fallback to antigravity-ide when --harness antigravity is used', async () => {
+      const result = await runCli(['init', '--harness', 'antigravity'], { cwd: tmpDir });
+      await expectSuccess(result);
+
+      const output = parseJsonOutput(result.stdout) as Record<string, unknown>;
+      expect(output.ok).toBe(true);
+      expect(output.harness).toBe('antigravity-ide');
+      expect(result.stdout).toContain('Antigravity IDE');
+      expect(result.stdout).toContain('Developer: Reload Window');
+    });
   });
 
   describe('invalid harness', () => {
@@ -321,6 +336,7 @@ describe('crewmate init', () => {
 
       const output = result.stdout + result.stderr;
       expect(output).toContain('opencode');
+      expect(output).toContain('antigravity-ide');
       expect(output).toContain('antigravity');
     });
   });

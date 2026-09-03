@@ -44,6 +44,8 @@ function formatOutput(data: UpdateCommandOutput): string {
     let actionLabel = `[${file.action.toUpperCase()}]`;
     if (file.action === 'backed_up_and_updated') {
       actionLabel = '[BACKUP & UPDATE]';
+    } else if (file.action === 'backed_up_and_removed') {
+      actionLabel = '[BACKUP & REMOVE]';
     }
     lines.push(`  ${actionLabel.padEnd(19)} ${file.path}`);
   }
@@ -57,9 +59,11 @@ function formatOutput(data: UpdateCommandOutput): string {
   }
 
   lines.push('');
-  lines.push(
-    `Summary: ${successData.summary.updated} updated, ${successData.summary.created} created, ${successData.summary.unchanged} unchanged, ${successData.summary.backedUp} backed up`
-  );
+  let summaryText = `Summary: ${successData.summary.updated} updated, ${successData.summary.created} created, ${successData.summary.unchanged} unchanged, ${successData.summary.backedUp} backed up`;
+  if (successData.summary.removed && successData.summary.removed > 0) {
+    summaryText += `, ${successData.summary.removed} removed`;
+  }
+  lines.push(summaryText);
   lines.push('');
   lines.push(JSON.stringify(data));
 
@@ -99,7 +103,7 @@ export function registerUpdateCommand(program: Command): void {
         if (manifest?.harness) {
           harnessName = manifest.harness;
         } else if (existsSync(join(targetDir, '.agents', 'plugins', 'crewmate'))) {
-          harnessName = 'antigravity';
+          harnessName = 'antigravity-ide';
         } else if (existsSync(join(targetDir, '.opencode'))) {
           harnessName = 'opencode';
         } else {
