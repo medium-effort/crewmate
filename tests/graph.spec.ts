@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   buildAgentNode,
   buildRailSegment,
+  buildBouncingRailSegment,
   renderGraph,
   renderLegend,
   detectTerminalCapability,
@@ -62,6 +63,34 @@ describe('activity graph rendering', () => {
       const rail = buildRailSegment(10, 0.5, CHAR_SETS.ascii);
       expect(rail).toContain('o');
       expect(rail).not.toContain('>:');
+    });
+  });
+
+  describe('buildBouncingRailSegment', () => {
+    it('bounces back and forth across 5 character positions', () => {
+      // 0: pos 0
+      expect(buildBouncingRailSegment(5, 0, CHAR_SETS.unicode)).toBe('●────');
+      // 1: pos 1
+      expect(buildBouncingRailSegment(5, 1, CHAR_SETS.unicode)).toBe('─●───');
+      // 2: pos 2
+      expect(buildBouncingRailSegment(5, 2, CHAR_SETS.unicode)).toBe('──●──');
+      // 3: pos 3
+      expect(buildBouncingRailSegment(5, 3, CHAR_SETS.unicode)).toBe('───●─');
+      // 4: pos 4 (touches skill)
+      expect(buildBouncingRailSegment(5, 4, CHAR_SETS.unicode)).toBe('────●');
+      // 5: bounces back to pos 3
+      expect(buildBouncingRailSegment(5, 5, CHAR_SETS.unicode)).toBe('───●─');
+      // 6: pos 2
+      expect(buildBouncingRailSegment(5, 6, CHAR_SETS.unicode)).toBe('──●──');
+      // 7: pos 1
+      expect(buildBouncingRailSegment(5, 7, CHAR_SETS.unicode)).toBe('─●───');
+      // 8: pos 0 (back at frontman)
+      expect(buildBouncingRailSegment(5, 8, CHAR_SETS.unicode)).toBe('●────');
+    });
+
+    it('defaults to center position when frame is undefined', () => {
+      expect(buildBouncingRailSegment(5, undefined, CHAR_SETS.unicode)).toBe('──●──');
+      expect(buildBouncingRailSegment(5, undefined, CHAR_SETS.ascii)).toBe('--o--');
     });
   });
 
@@ -168,6 +197,67 @@ describe('activity graph rendering', () => {
         charSet: CHAR_SETS.unicode,
       });
       expect(idleResult).toContain('idle · waiting for dispatch');
+    });
+
+    it('should render skill channeling visual when harness is antigravity', () => {
+      const scoutResult = renderGraph({
+        edges: [],
+        harnessName: 'antigravity',
+        activity: {
+          id: 'a1',
+          briefId: 'b1',
+          activityType: 'analyzing',
+          message: 'Scout workspace discovery',
+          metadata: null,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        },
+        spinnerFrame: 0,
+        charSet: CHAR_SETS.unicode,
+      });
+      expect(scoutResult).toContain('●────');
+      expect(scoutResult).toContain('[Skill: Scout]');
+      expect(scoutResult).toContain('analyzing codebase architecture: Scout workspace discovery');
+
+      const plannerResult = renderGraph({
+        edges: [],
+        harnessName: 'antigravity',
+        activity: {
+          id: 'a2',
+          briefId: 'b1',
+          activityType: 'planning',
+          message: 'Decomposing brief into tasks',
+          metadata: null,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        },
+        spinnerFrame: 1,
+        charSet: CHAR_SETS.unicode,
+      });
+      expect(plannerResult).toContain('─●───');
+      expect(plannerResult).toContain('[Skill: Planner]');
+      expect(plannerResult).toContain('decomposing brief & dependency graph');
+
+      const executorResult = renderGraph({
+        edges: [],
+        harnessName: 'antigravity',
+        activity: {
+          id: 'a3',
+          briefId: 'b1',
+          activityType: 'orchestrating',
+          message: 'Executing Task 1: Scaffolding',
+          metadata: null,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        },
+        spinnerFrame: 2,
+        charSet: CHAR_SETS.unicode,
+      });
+      expect(executorResult).toContain('──●──');
+      expect(executorResult).toContain('[Skill: Executor]');
+      expect(executorResult).toContain(
+        'executing task implementation: Executing Task 1: Scaffolding'
+      );
     });
 
     it('should render single dispatch from frontman to executor with animated spinners and legend', () => {

@@ -14,7 +14,8 @@ interface ErrorOutput {
   available?: string[];
 }
 
-type InitCommandOutput = SuccessOutput | ErrorOutput;
+export type InitCommandOutput = SuccessOutput | ErrorOutput;
+export type { SuccessOutput, ErrorOutput };
 
 function out(data: InitCommandOutput, jsonOnly: boolean = false): void {
   if (!jsonOnly) {
@@ -24,7 +25,7 @@ function out(data: InitCommandOutput, jsonOnly: boolean = false): void {
   }
 }
 
-function formatOutput(data: InitCommandOutput): string {
+export function formatOutput(data: InitCommandOutput): string {
   if (data.ok === false && data.error) {
     const lines = [`Error: ${data.error}`];
 
@@ -52,6 +53,16 @@ function formatOutput(data: InitCommandOutput): string {
       for (const file of successData.filesWritten) {
         lines.push(`  - ${file}`);
       }
+    }
+
+    if (successData.harness === 'antigravity-ide' || successData.harness === 'antigravity') {
+      lines.push('');
+      lines.push(
+        'Note: If this workspace is already open in Antigravity IDE, reload the window to apply changes:'
+      );
+      lines.push(
+        '  Press Ctrl+Shift+P (or Cmd+Shift+P on macOS) -> type "Developer: Reload Window" -> press Enter.'
+      );
     }
 
     lines.push('');

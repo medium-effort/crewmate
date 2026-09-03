@@ -246,7 +246,11 @@ describe('Crewmate MCP Server', () => {
       // List Events
       const listEventsRes = await executeTool('crewmate_list_events', { briefId }, db);
       expect(listEventsRes.ok).toBe(true);
-      expect((listEventsRes.events as unknown[]).length).toBe(1);
+      const events = listEventsRes.events as Array<{ type: string; message: string }>;
+      expect(events.length).toBe(4);
+      expect(events.some((e) => e.type === 'locked')).toBe(true);
+      expect(events.some((e) => e.type === 'artifact')).toBe(true);
+      expect(events.some((e) => e.type === 'started')).toBe(true);
 
       // Set Activity
       const setActivityRes = await executeTool(
@@ -270,6 +274,27 @@ describe('Crewmate MCP Server', () => {
       // Remove Task
       const removeTaskRes = await executeTool('crewmate_remove_task', { taskId }, db);
       expect(removeTaskRes.ok).toBe(true);
+    });
+
+    it('should allow crewmate_add_task and crewmate_list_tasks without briefId', async () => {
+      const createRes = await executeTool('crewmate_create_brief', {}, db);
+      expect(createRes.id).toBeDefined();
+
+      const addTaskRes = await executeTool(
+        'crewmate_add_task',
+        {
+          title: 'Auto-resolved Task',
+          description: 'Task added without explicit briefId',
+        },
+        db
+      );
+      expect(addTaskRes.ok).toBe(true);
+
+      const listRes = await executeTool('crewmate_list_tasks', {}, db);
+      expect(listRes.ok).toBe(true);
+      expect(
+        (listRes.tasks as Array<{ title: string }>).some((t) => t.title === 'Auto-resolved Task')
+      ).toBe(true);
     });
 
     it('should throw on unknown tool', async () => {

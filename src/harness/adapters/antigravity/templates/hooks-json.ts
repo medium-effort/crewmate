@@ -3,17 +3,30 @@ export const HOOKS_JSON =
     {
       'crewmate-events': {
         enabled: true,
+        PreInvocation: [
+          {
+            type: 'command',
+            command: 'crewmate hook heartbeat',
+            timeout: 10,
+          },
+        ],
         PostToolUse: [
           {
-            matcher: 'run_command|replace_file_content|write_to_file|multi_replace_file_content',
+            matcher: 'run_command',
             hooks: [
               {
                 type: 'command',
-                command:
-                  'crewmate event add --actor executor --type started --message "File modified by executor"',
+                command: 'crewmate hook post-tool',
                 timeout: 10,
               },
             ],
+          },
+        ],
+        Stop: [
+          {
+            type: 'command',
+            command: 'crewmate hook stop',
+            timeout: 10,
           },
         ],
       },

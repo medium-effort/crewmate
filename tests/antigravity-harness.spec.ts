@@ -1,20 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { getAdapter, listAdapters, listAdapterNames } from '../src/harness/registry.js';
 import { AntigravityAdapter } from '../src/harness/adapters/antigravity/adapter.js';
 import { PLUGIN_JSON } from '../src/harness/adapters/antigravity/templates/plugin-json.js';
 import { MCP_CONFIG_JSON } from '../src/harness/adapters/antigravity/templates/mcp-config-json.js';
 import { HOOKS_JSON } from '../src/harness/adapters/antigravity/templates/hooks-json.js';
 import CREWMATE_RULE_MD from '../src/harness/adapters/antigravity/templates/rules/crewmate.md';
-import BRIEF_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/brief.md';
-import EXECUTE_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/execute.md';
 import SCOUT_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/scout.md';
 import PLANNER_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/planner.md';
 import EXECUTOR_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/executor.md';
 import BRIEF_WORKFLOW_MD from '../src/harness/adapters/antigravity/templates/workflows/brief.md';
 import EXECUTE_WORKFLOW_MD from '../src/harness/adapters/antigravity/templates/workflows/execute.md';
 import { readManifest } from '../src/harness/manifest.js';
+import { formatOutput } from '../src/commands/init.js';
 
 describe('Antigravity Harness Adapter', () => {
   const testDir = join(process.cwd(), '.tmp-test-antigravity');
@@ -29,22 +28,29 @@ describe('Antigravity Harness Adapter', () => {
   });
 
   describe('Registry Integration', () => {
-    it("should return Antigravity adapter for 'antigravity'", () => {
-      const adapter = getAdapter('antigravity');
+    it("should return Antigravity adapter for 'antigravity-ide'", () => {
+      const adapter = getAdapter('antigravity-ide');
       expect(adapter).toBeDefined();
-      expect(adapter?.name).toBe('antigravity');
+      expect(adapter?.name).toBe('antigravity-ide');
       expect(adapter?.description).toBe('Antigravity AI coding assistant and agent environment');
     });
 
-    it('should include antigravity in listAdapterNames', () => {
+    it("should fallback to Antigravity adapter for 'antigravity'", () => {
+      const adapter = getAdapter('antigravity');
+      expect(adapter).toBeDefined();
+      expect(adapter?.name).toBe('antigravity-ide');
+    });
+
+    it('should include antigravity-ide and antigravity in listAdapterNames', () => {
       const names = listAdapterNames();
+      expect(names).toContain('antigravity-ide');
       expect(names).toContain('antigravity');
       expect(names).toContain('opencode');
     });
 
     it('should list all adapters with valid interface', () => {
       const adapters = listAdapters();
-      const antigravity = adapters.find((a) => a.name === 'antigravity');
+      const antigravity = adapters.find((a) => a.name === 'antigravity-ide');
       expect(antigravity).toBeDefined();
       expect(antigravity?.install).toBeInstanceOf(Function);
       expect(antigravity?.update).toBeInstanceOf(Function);
@@ -80,9 +86,8 @@ describe('Antigravity Harness Adapter', () => {
       expect(CREWMATE_RULE_MD).toContain('crewmate-planner');
       expect(CREWMATE_RULE_MD).toContain('crewmate-executor');
       expect(CREWMATE_RULE_MD).toContain('ask_question');
+      expect(CREWMATE_RULE_MD).toContain('Unslashed Intent Interception & Workflow Loading');
 
-      expect(BRIEF_SKILL_MD).toMatch(/^---\r?\nname: crewmate-brief/);
-      expect(EXECUTE_SKILL_MD).toMatch(/^---\r?\nname: crewmate-execute/);
       expect(SCOUT_SKILL_MD).toMatch(/^---\r?\nname: crewmate-scout/);
       expect(PLANNER_SKILL_MD).toMatch(/^---\r?\nname: crewmate-planner/);
       expect(EXECUTOR_SKILL_MD).toMatch(/^---\r?\nname: crewmate-executor/);
@@ -99,8 +104,8 @@ describe('Antigravity Harness Adapter', () => {
       const adapter = new AntigravityAdapter();
       const result = await adapter.install(testDir);
 
-      expect(result.harness).toBe('antigravity');
-      expect(result.filesWritten.length).toBe(12);
+      expect(result.harness).toBe('antigravity-ide');
+      expect(result.filesWritten.length).toBe(10);
 
       const expectedFiles = [
         '.agents/mcp_config.json',
@@ -110,8 +115,6 @@ describe('Antigravity Harness Adapter', () => {
         '.agents/plugins/crewmate/mcp_config.json',
         '.agents/plugins/crewmate/hooks.json',
         '.agents/plugins/crewmate/rules/crewmate.md',
-        '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md',
-        '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md',
         '.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md',
         '.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md',
         '.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md',
@@ -124,8 +127,8 @@ describe('Antigravity Harness Adapter', () => {
 
       const manifest = readManifest(testDir);
       expect(manifest).toBeDefined();
-      expect(manifest?.harness).toBe('antigravity');
-      expect(Object.keys(manifest?.files ?? {}).length).toBe(12);
+      expect(manifest?.harness).toBe('antigravity-ide');
+      expect(Object.keys(manifest?.files ?? {}).length).toBe(10);
     });
 
     it('should preserve existing custom MCP servers in .agents/mcp_config.json on install', async () => {
@@ -174,8 +177,8 @@ describe('Antigravity Harness Adapter', () => {
       await adapter.install(testDir);
 
       const updateResult = await adapter.update(testDir);
-      expect(updateResult.summary.total).toBe(12);
-      expect(updateResult.summary.unchanged).toBe(12);
+      expect(updateResult.summary.total).toBe(10);
+      expect(updateResult.summary.unchanged).toBe(10);
       expect(updateResult.summary.updated).toBe(0);
       expect(updateResult.summary.created).toBe(0);
       expect(updateResult.summary.backedUp).toBe(0);
@@ -251,6 +254,105 @@ describe('Antigravity Harness Adapter', () => {
 
       // File should remain as modified by user since dryRun was true
       expect(readFileSync(rulePath, 'utf-8')).toBe('# Modified rule');
+    });
+
+    it('should backup and remove deprecated files on update', async () => {
+      const adapter = new AntigravityAdapter();
+      await adapter.install(testDir);
+
+      // Simulate a project previously initialized with old skills
+      const oldBriefSkill = join(
+        testDir,
+        '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md'
+      );
+      mkdirSync(dirname(oldBriefSkill), { recursive: true });
+      writeFileSync(oldBriefSkill, '--- \nname: crewmate-brief\n---\n# Old brief skill', 'utf-8');
+
+      const updateResult = await adapter.update(testDir);
+
+      // Deprecated skill should be backed up and removed
+      expect(existsSync(oldBriefSkill)).toBe(false);
+      expect(existsSync(dirname(oldBriefSkill))).toBe(false);
+      expect(updateResult.summary.removed).toBe(1);
+      expect(updateResult.summary.backedUp).toBe(1);
+
+      const removedStatus = updateResult.files.find(
+        (f) => f.path === '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md'
+      );
+      expect(removedStatus).toBeDefined();
+      expect(removedStatus?.action).toBe('backed_up_and_removed');
+
+      // Verify backup was created in .crewmate/backups/
+      const backupRelPath = updateResult.backedUpFiles.find((p) => p.includes('crewmate-brief'));
+      expect(backupRelPath).toBeDefined();
+      expect(existsSync(join(testDir, backupRelPath!))).toBe(true);
+      expect(readFileSync(join(testDir, backupRelPath!), 'utf-8')).toContain('# Old brief skill');
+    });
+
+    it('should backup and remove deprecated files on install if they exist on disk', async () => {
+      const adapter = new AntigravityAdapter();
+
+      // Pre-create an old skill before install
+      const oldExecuteSkill = join(
+        testDir,
+        '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md'
+      );
+      mkdirSync(dirname(oldExecuteSkill), { recursive: true });
+      writeFileSync(oldExecuteSkill, '# Old execute skill', 'utf-8');
+
+      const result = await adapter.install(testDir);
+
+      // Deprecated skill should be removed and parent dir cleaned
+      expect(existsSync(oldExecuteSkill)).toBe(false);
+      expect(existsSync(dirname(oldExecuteSkill))).toBe(false);
+      expect(result.filesWritten).not.toContain(
+        '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md'
+      );
+
+      // Backup should exist in .crewmate/backups
+      const backupsDir = join(testDir, '.crewmate/backups');
+      expect(existsSync(backupsDir)).toBe(true);
+    });
+  });
+
+  describe('Init Command Output Reminder', () => {
+    it('should include reload window reminder for antigravity-ide harness', () => {
+      const output = formatOutput({
+        ok: true,
+        harness: 'antigravity-ide',
+        filesWritten: ['.agents/plugins/crewmate/plugin.json'],
+      });
+
+      expect(output).toContain('Initialized crewmate integration for antigravity-ide');
+      expect(output).toContain('Note: If this workspace is already open in Antigravity IDE');
+      expect(output).toContain('reload the window to apply changes:');
+      expect(output).toContain('Press Ctrl+Shift+P (or Cmd+Shift+P on macOS)');
+      expect(output).toContain('Developer: Reload Window');
+      expect(output).toContain('press Enter');
+    });
+
+    it('should include reload window reminder for fallback antigravity harness', () => {
+      const output = formatOutput({
+        ok: true,
+        harness: 'antigravity',
+        filesWritten: ['.agents/plugins/crewmate/plugin.json'],
+      });
+
+      expect(output).toContain('Initialized crewmate integration for antigravity');
+      expect(output).toContain('Note: If this workspace is already open in Antigravity IDE');
+      expect(output).toContain('Developer: Reload Window');
+    });
+
+    it('should not include reload window reminder for opencode harness', () => {
+      const output = formatOutput({
+        ok: true,
+        harness: 'opencode',
+        filesWritten: ['.opencode/plugins/crewmate.ts'],
+      });
+
+      expect(output).toContain('Initialized crewmate integration for opencode');
+      expect(output).not.toContain('Antigravity IDE');
+      expect(output).not.toContain('Developer: Reload Window');
     });
   });
 });

@@ -124,7 +124,9 @@ export function parseFieldValue(field: BriefField, raw: string): unknown {
         }
       }
     } else if (field === 'constraints') {
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+        parsed = { requirements: parsed, exclusions: [] };
+      } else if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         throw new Error(
           `Invalid structure for field "constraints". Expected format: ${FIELD_FORMAT_HINTS.constraints}`
         );
@@ -147,15 +149,21 @@ export function parseFieldValue(field: BriefField, raw: string): unknown {
           `Invalid structure for field "deliverables". Expected format: ${FIELD_FORMAT_HINTS.deliverables}`
         );
       }
-      for (const item of parsed) {
+      parsed = parsed.map((item) => {
+        if (typeof item === 'string') {
+          return { type: 'code', format: item };
+        }
         if (typeof item !== 'object' || item === null || Array.isArray(item)) {
           throw new Error(
             `Invalid element in "deliverables": each item must be an object with "type" and "format"`
           );
         }
-      }
+        return item;
+      });
     } else if (field === 'qualityStandards') {
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+        parsed = { general: parsed };
+      } else if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         throw new Error(
           `Invalid structure for field "qualityStandards". Expected format: ${FIELD_FORMAT_HINTS.qualityStandards}`
         );

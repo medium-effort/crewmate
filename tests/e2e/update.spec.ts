@@ -95,6 +95,6 @@ describe('crewmate update', () => {
     expect(updateRes.stdout).toContain('Updated crewmate integration for antigravity');
     const json = parseJsonOutput(updateRes.stdout);
     expect(json.ok).toBe(true);
-    expect(json.harness).toBe('antigravity');
+    expect(json.harness).toBe('antigravity-ide');
   });
 });

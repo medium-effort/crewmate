@@ -125,6 +125,25 @@ describe('validation', () => {
       expect(constraints).toEqual({ requirements: ['Node 20+'], exclusions: ['Cloud'] });
     });
 
+    it('should normalize string array inputs for constraints, deliverables, and qualityStandards', () => {
+      const constraints = parseFieldValue('constraints', '["Node 20+", "Single startup command"]');
+      expect(constraints).toEqual({
+        requirements: ['Node 20+', 'Single startup command'],
+        exclusions: [],
+      });
+
+      const deliverables = parseFieldValue('deliverables', '["package.json", "Server endpoints"]');
+      expect(deliverables).toEqual([
+        { type: 'code', format: 'package.json' },
+        { type: 'code', format: 'Server endpoints' },
+      ]);
+
+      const quality = parseFieldValue('qualityStandards', '["Clean code", "100% tests"]');
+      expect(quality).toEqual({
+        general: ['Clean code', '100% tests'],
+      });
+    });
+
     it('should throw on invalid structure for deliverables', () => {
       expect(() => parseFieldValue('deliverables', '{"type": "code"}')).toThrow(
         /Invalid structure for field "deliverables"/

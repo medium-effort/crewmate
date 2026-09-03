@@ -9,7 +9,13 @@ export interface InstallResult {
 /**
  * Status of an individual file during an update
  */
-export type FileUpdateAction = 'created' | 'updated' | 'unchanged' | 'backed_up_and_updated';
+export type FileUpdateAction =
+  | 'created'
+  | 'updated'
+  | 'unchanged'
+  | 'backed_up_and_updated'
+  | 'backed_up_and_removed'
+  | 'removed';
 
 /**
  *
@@ -38,6 +44,7 @@ export interface UpdateSummary {
   updated: number;
   unchanged: number;
   backedUp: number;
+  removed?: number;
 }
 
 /**
