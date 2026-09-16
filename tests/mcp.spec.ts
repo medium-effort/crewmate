@@ -17,8 +17,8 @@ describe('Crewmate MCP Server', () => {
   });
 
   describe('Tools Schema Definition', () => {
-    it('should expose all 19 crewmate MCP tools', () => {
-      expect(MCP_TOOLS.length).toBe(19);
+    it('should expose all 37 crewmate MCP tools', () => {
+      expect(MCP_TOOLS.length).toBe(37);
 
       const toolNames = MCP_TOOLS.map((t) => t.name);
       expect(toolNames).toContain('crewmate_create_brief');
@@ -27,6 +27,9 @@ describe('Crewmate MCP Server', () => {
       expect(toolNames).toContain('crewmate_show_brief');
       expect(toolNames).toContain('crewmate_check_status');
       expect(toolNames).toContain('crewmate_finish_brief');
+      expect(toolNames).toContain('crewmate_reopen_brief');
+      expect(toolNames).toContain('crewmate_delete_brief');
+      expect(toolNames).toContain('crewmate_unset_field');
       expect(toolNames).toContain('crewmate_add_task');
       expect(toolNames).toContain('crewmate_list_tasks');
       expect(toolNames).toContain('crewmate_update_task');
@@ -34,8 +37,23 @@ describe('Crewmate MCP Server', () => {
       expect(toolNames).toContain('crewmate_acquire_lock');
       expect(toolNames).toContain('crewmate_release_lock');
       expect(toolNames).toContain('crewmate_list_locks');
+      expect(toolNames).toContain('crewmate_clear_locks');
       expect(toolNames).toContain('crewmate_add_artifact');
       expect(toolNames).toContain('crewmate_list_artifacts');
+      expect(toolNames).toContain('crewmate_log_issue');
+      expect(toolNames).toContain('crewmate_record_attempt');
+      expect(toolNames).toContain('crewmate_record_fix');
+      expect(toolNames).toContain('crewmate_search_artifacts');
+      expect(toolNames).toContain('crewmate_precheck_file');
+      expect(toolNames).toContain('crewmate_get_briefing');
+      expect(toolNames).toContain('crewmate_get_context');
+      expect(toolNames).toContain('crewmate_supersede_artifact');
+      expect(toolNames).toContain('crewmate_workflow_start');
+      expect(toolNames).toContain('crewmate_workflow_status');
+      expect(toolNames).toContain('crewmate_workflow_advance');
+      expect(toolNames).toContain('crewmate_workflow_advance_node');
+      expect(toolNames).toContain('crewmate_workflow_skip');
+      expect(toolNames).toContain('crewmate_workflow_cancel');
       expect(toolNames).toContain('crewmate_add_event');
       expect(toolNames).toContain('crewmate_list_events');
       expect(toolNames).toContain('crewmate_set_activity');
@@ -297,6 +315,276 @@ describe('Crewmate MCP Server', () => {
       ).toBe(true);
     });
 
+    it('should support brief maintenance tools: reopen, unset, and delete', async () => {
+      const createRes = await executeTool('crewmate_create_brief', {}, db);
+      const briefId = createRes.id as string;
+
+      await executeTool(
+        'crewmate_update_field',
+        { id: briefId, field: 'goal', value: 'Maintain brief' },
+        db
+      );
+      const unsetRes = await executeTool(
+        'crewmate_unset_field',
+        { id: briefId, field: 'goal' },
+        db
+      );
+      expect(unsetRes.ok).toBe(true);
+
+      const getRes = await executeTool('crewmate_get_field', { id: briefId, field: 'goal' }, db);
+      expect(getRes.value).toBeNull();
+
+      // Complete and reopen
+      await executeTool(
+        'crewmate_update_field',
+        { id: briefId, field: 'workType', value: 'software' },
+        db
+      );
+      await executeTool(
+        'crewmate_update_field',
+        { id: briefId, field: 'goal', value: 'Complete me' },
+        db
+      );
+      await executeTool(
+        'crewmate_update_field',
+        { id: briefId, field: 'scope', value: JSON.stringify({ included: ['x'], excluded: [] }) },
+        db
+      );
+      await executeTool(
+        'crewmate_update_field',
+        { id: briefId, field: 'functionalRequirements', value: JSON.stringify(['r1']) },
+        db
+      );
+      await executeTool(
+        'crewmate_update_field',
+        { id: briefId, field: 'acceptanceCriteria', value: JSON.stringify(['c1']) },
+        db
+      );
+
+      await executeTool('crewmate_finish_brief', { id: briefId }, db);
+      const reopenRes = await executeTool('crewmate_reopen_brief', { id: briefId }, db);
+      expect(reopenRes.ok).toBe(true);
+      expect(reopenRes.status).toBe('draft');
+
+      const deleteRes = await executeTool('crewmate_delete_brief', { id: briefId }, db);
+      expect(deleteRes.ok).toBe(true);
+      expect(deleteRes.deletedId).toBe(briefId);
+    });
+
+    it('should support lock clearing via crewmate_clear_locks', async () => {
+      const createRes = await executeTool('crewmate_create_brief', {}, db);
+      const briefId = createRes.id as string;
+      const taskRes = await executeTool(
+        'crewmate_add_task',
+        { briefId, description: 'Task for locking' },
+        db
+      );
+      const taskId = taskRes.id as string;
+
+      await executeTool(
+        'crewmate_acquire_lock',
+        { taskId, files: ['src/app.ts', 'src/util.ts'] },
+        db
+      );
+      const clearRes = await executeTool('crewmate_clear_locks', { taskId }, db);
+      expect(clearRes.ok).toBe(true);
+      expect(clearRes.released).toBe(2);
+
+      const listLocksRes = await executeTool('crewmate_list_locks', { taskId }, db);
+      expect((listLocksRes.locks as unknown[]).length).toBe(0);
+    });
+
+    it('should support artifact memory tools: log_issue, record_attempt, record_fix, search, precheck, briefing, context, and supersede', async () => {
+      const createRes = await executeTool('crewmate_create_brief', {}, db);
+      const briefId = createRes.id as string;
+      const task1Res = await executeTool(
+        'crewmate_add_task',
+        { briefId, description: 'Task 1' },
+        db
+      );
+      const task1Id = task1Res.id as string;
+      const task2Res = await executeTool(
+        'crewmate_add_task',
+        { briefId, description: 'Task 2', dependencies: [task1Id] },
+        db
+      );
+      const task2Id = task2Res.id as string;
+
+      // 1. Brief-level and task-level artifacts with DAG filtering
+      const addArt1 = await executeTool(
+        'crewmate_add_artifact',
+        {
+          briefId,
+          type: 'constraint',
+          content: 'No external DBs',
+        },
+        db
+      );
+      expect(addArt1.ok).toBe(true);
+
+      const addArt2 = await executeTool(
+        'crewmate_add_artifact',
+        {
+          taskId: task1Id,
+          type: 'decision',
+          content: 'Use SQLite',
+        },
+        db
+      );
+      expect(addArt2.ok).toBe(true);
+
+      const listDag = await executeTool('crewmate_list_artifacts', { forTask: task2Id }, db);
+      expect(listDag.ok).toBe(true);
+      expect((listDag.artifacts as unknown[]).length).toBeGreaterThanOrEqual(2);
+
+      // 2. Issue logging, attempts, and fixes
+      const logIssueRes = await executeTool(
+        'crewmate_log_issue',
+        {
+          briefId,
+          taskId: task2Id,
+          summary: 'Database connection timeout',
+          location: 'src/db.ts',
+        },
+        db
+      );
+      expect(logIssueRes.ok).toBe(true);
+      const issueArtifact = logIssueRes.artifact as { id: string };
+
+      const attemptRes = await executeTool(
+        'crewmate_record_attempt',
+        {
+          briefId,
+          taskId: task2Id,
+          issueId: issueArtifact.id,
+          summary: 'Increase pool size',
+          outcome: 'failed',
+        },
+        db
+      );
+      expect(attemptRes.ok).toBe(true);
+
+      const fixRes = await executeTool(
+        'crewmate_record_fix',
+        {
+          briefId,
+          taskId: task2Id,
+          issueId: issueArtifact.id,
+          summary: 'Use persistent connection',
+        },
+        db
+      );
+      expect(fixRes.ok).toBe(true);
+
+      // 3. Search artifacts
+      const searchRes = await executeTool(
+        'crewmate_search_artifacts',
+        {
+          briefId,
+          query: 'connection',
+        },
+        db
+      );
+      expect(searchRes.ok).toBe(true);
+      expect((searchRes.artifacts as unknown[]).length).toBeGreaterThanOrEqual(1);
+
+      // 4. Precheck file
+      const precheckRes = await executeTool(
+        'crewmate_precheck_file',
+        {
+          briefId,
+          filePath: 'src/db.ts',
+        },
+        db
+      );
+      expect(precheckRes.ok).toBe(true);
+      expect(Array.isArray(precheckRes.warnings)).toBe(true);
+
+      // 5. Briefing & Context
+      const briefingRes = await executeTool('crewmate_get_briefing', { briefId }, db);
+      expect(briefingRes.ok).toBe(true);
+      expect(briefingRes.briefing).toBeDefined();
+
+      const contextRes = await executeTool('crewmate_get_context', { briefId, tokens: 1000 }, db);
+      expect(contextRes.ok).toBe(true);
+      expect(contextRes.context).toBeDefined();
+
+      // 6. Supersede
+      const addArt3 = await executeTool(
+        'crewmate_add_artifact',
+        {
+          briefId,
+          type: 'decision',
+          content: 'Use PostgreSQL instead',
+        },
+        db
+      );
+      const supersedeRes = await executeTool(
+        'crewmate_supersede_artifact',
+        {
+          oldId: addArt2.id,
+          newId: addArt3.id,
+        },
+        db
+      );
+      expect(supersedeRes.ok).toBe(true);
+      expect(supersedeRes.supersededId).toBe(addArt2.id);
+    });
+
+    it('should support workflow engine tools: start, status, advance_node, advance, skip, and cancel', async () => {
+      const createRes = await executeTool('crewmate_create_brief', {}, db);
+      const briefId = createRes.id as string;
+
+      // Start workflow
+      const startRes = await executeTool('crewmate_workflow_start', { briefId }, db);
+      expect(startRes.ok).toBe(true);
+      const summary = startRes.data as {
+        id: string;
+        currentStage: string;
+        currentNode?: { id: string };
+      };
+      expect(summary.id).toBeDefined();
+      expect(summary.currentStage).toBe('discussion');
+      expect(summary.currentNode?.id).toBe('frontman-interview');
+
+      // Status
+      const statusRes = await executeTool('crewmate_workflow_status', { runId: summary.id }, db);
+      expect(statusRes.ok).toBe(true);
+      expect((statusRes.data as { currentStage: string }).currentStage).toBe('discussion');
+
+      // Advance node
+      const advanceNodeRes = await executeTool(
+        'crewmate_workflow_advance_node',
+        {
+          runId: summary.id,
+        },
+        db
+      );
+      expect(advanceNodeRes.ok).toBe(true);
+
+      // Skip stage
+      const skipRes = await executeTool(
+        'crewmate_workflow_skip',
+        {
+          runId: summary.id,
+          stageId: 'research',
+        },
+        db
+      );
+      expect(skipRes.ok).toBe(true);
+
+      // Cancel workflow
+      const cancelRes = await executeTool(
+        'crewmate_workflow_cancel',
+        {
+          runId: summary.id,
+        },
+        db
+      );
+      expect(cancelRes.ok).toBe(true);
+      expect((cancelRes.data as { status: string }).status).toBe('cancelled');
+    });
+
     it('should throw on unknown tool', async () => {
       await expect(executeTool('crewmate_nonexistent', {}, db)).rejects.toThrow(/Unknown tool/);
     });
@@ -422,7 +710,7 @@ describe('Crewmate MCP Server', () => {
       expect(tasksB[0].status).toBe('pending');
     });
 
-    it('all 19 tool schemas should accept optional projectPath parameter', () => {
+    it('all 37 tool schemas should accept optional projectPath parameter', () => {
       for (const tool of MCP_TOOLS) {
         expect(
           tool.inputSchema.properties,

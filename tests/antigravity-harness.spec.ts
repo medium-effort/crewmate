@@ -10,8 +10,7 @@ import CREWMATE_RULE_MD from '../src/harness/adapters/antigravity/templates/rule
 import SCOUT_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/scout.md';
 import PLANNER_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/planner.md';
 import EXECUTOR_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/executor.md';
-import BRIEF_WORKFLOW_MD from '../src/harness/adapters/antigravity/templates/workflows/brief.md';
-import EXECUTE_WORKFLOW_MD from '../src/harness/adapters/antigravity/templates/workflows/execute.md';
+import WORKFLOW_SKILL_MD from '../src/harness/adapters/antigravity/templates/skills/workflow.md';
 import { readManifest } from '../src/harness/manifest.js';
 import { formatOutput } from '../src/commands/init.js';
 
@@ -86,16 +85,14 @@ describe('Antigravity Harness Adapter', () => {
       expect(CREWMATE_RULE_MD).toContain('crewmate-planner');
       expect(CREWMATE_RULE_MD).toContain('crewmate-executor');
       expect(CREWMATE_RULE_MD).toContain('ask_question');
-      expect(CREWMATE_RULE_MD).toContain('Unslashed Intent Interception & Workflow Loading');
+      expect(CREWMATE_RULE_MD).toContain('Unslashed Intent & Legacy Command Interception');
 
       expect(SCOUT_SKILL_MD).toMatch(/^---\r?\nname: crewmate-scout/);
       expect(PLANNER_SKILL_MD).toMatch(/^---\r?\nname: crewmate-planner/);
       expect(EXECUTOR_SKILL_MD).toMatch(/^---\r?\nname: crewmate-executor/);
 
-      expect(BRIEF_WORKFLOW_MD).toMatch(/^---\r?\ndescription: /);
-      expect(BRIEF_WORKFLOW_MD).toContain('# /brief Workflow');
-      expect(EXECUTE_WORKFLOW_MD).toMatch(/^---\r?\ndescription: /);
-      expect(EXECUTE_WORKFLOW_MD).toContain('# /execute Workflow');
+      expect(WORKFLOW_SKILL_MD).toMatch(/^---\r?\nname: workflow/);
+      expect(WORKFLOW_SKILL_MD).toContain('# /workflow');
     });
   });
 
@@ -105,19 +102,32 @@ describe('Antigravity Harness Adapter', () => {
       const result = await adapter.install(testDir);
 
       expect(result.harness).toBe('antigravity-ide');
-      expect(result.filesWritten.length).toBe(10);
+      expect(result.filesWritten.length).toBe(23);
 
       const expectedFiles = [
         '.agents/mcp_config.json',
-        '.agents/workflows/brief.md',
-        '.agents/workflows/execute.md',
         '.agents/plugins/crewmate/plugin.json',
         '.agents/plugins/crewmate/mcp_config.json',
         '.agents/plugins/crewmate/hooks.json',
         '.agents/plugins/crewmate/rules/crewmate.md',
+        '.agents/plugins/crewmate/skills/workflow/SKILL.md',
         '.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md',
         '.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md',
         '.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md',
+        '.crewmate/workflows/default.json',
+        '.crewmate/workflows/stages/discussion.json',
+        '.crewmate/workflows/stages/research.json',
+        '.crewmate/workflows/stages/planning.json',
+        '.crewmate/workflows/stages/execution.json',
+        '.crewmate/workflows/stages/verification.json',
+        '.crewmate/workflows/nodes/frontman-interview.json',
+        '.crewmate/workflows/nodes/validate-brief.json',
+        '.crewmate/workflows/nodes/scout-approval.json',
+        '.crewmate/workflows/nodes/scout-explore.json',
+        '.crewmate/workflows/nodes/planner-decompose.json',
+        '.crewmate/workflows/nodes/task-approval.json',
+        '.crewmate/workflows/nodes/executor-run.json',
+        '.crewmate/workflows/nodes/verify-artifacts.json',
       ];
 
       for (const relPath of expectedFiles) {
@@ -128,7 +138,7 @@ describe('Antigravity Harness Adapter', () => {
       const manifest = readManifest(testDir);
       expect(manifest).toBeDefined();
       expect(manifest?.harness).toBe('antigravity-ide');
-      expect(Object.keys(manifest?.files ?? {}).length).toBe(10);
+      expect(Object.keys(manifest?.files ?? {}).length).toBe(23);
     });
 
     it('should preserve existing custom MCP servers in .agents/mcp_config.json on install', async () => {
@@ -177,8 +187,8 @@ describe('Antigravity Harness Adapter', () => {
       await adapter.install(testDir);
 
       const updateResult = await adapter.update(testDir);
-      expect(updateResult.summary.total).toBe(10);
-      expect(updateResult.summary.unchanged).toBe(10);
+      expect(updateResult.summary.total).toBe(23);
+      expect(updateResult.summary.unchanged).toBe(23);
       expect(updateResult.summary.updated).toBe(0);
       expect(updateResult.summary.created).toBe(0);
       expect(updateResult.summary.backedUp).toBe(0);
@@ -312,6 +322,30 @@ describe('Antigravity Harness Adapter', () => {
       // Backup should exist in .crewmate/backups
       const backupsDir = join(testDir, '.crewmate/backups');
       expect(existsSync(backupsDir)).toBe(true);
+    });
+
+    it('should backup and remove legacy brief.md, execute.md, and workflow.md workflows on update', async () => {
+      const adapter = new AntigravityAdapter();
+      await adapter.install(testDir);
+
+      // Simulate legacy workflow files left over
+      const workflowsDir = join(testDir, '.agents/workflows');
+      mkdirSync(workflowsDir, { recursive: true });
+      const legacyBrief = join(workflowsDir, 'brief.md');
+      const legacyExecute = join(workflowsDir, 'execute.md');
+      const legacyWorkflow = join(workflowsDir, 'workflow.md');
+      writeFileSync(legacyBrief, '# Legacy Brief\n', 'utf-8');
+      writeFileSync(legacyExecute, '# Legacy Execute\n', 'utf-8');
+      writeFileSync(legacyWorkflow, '# Legacy Workflow\n', 'utf-8');
+
+      const updateResult = await adapter.update(testDir);
+
+      expect(existsSync(legacyBrief)).toBe(false);
+      expect(existsSync(legacyExecute)).toBe(false);
+      expect(existsSync(legacyWorkflow)).toBe(false);
+      expect(existsSync(join(testDir, '.agents/workflows'))).toBe(false);
+      expect(updateResult.summary.removed).toBe(3);
+      expect(updateResult.summary.backedUp).toBe(3);
     });
   });
 

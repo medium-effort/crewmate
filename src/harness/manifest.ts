@@ -29,7 +29,20 @@ export function readManifest(targetDir: string): CrewmateManifest | null {
   }
   try {
     const raw = readFileSync(manifestPath, 'utf-8');
-    return JSON.parse(raw) as CrewmateManifest;
+    const parsed = JSON.parse(raw) as CrewmateManifest;
+    if (parsed && typeof parsed === 'object') {
+      const harnesses =
+        Array.isArray(parsed.harnesses) && parsed.harnesses.length > 0
+          ? parsed.harnesses
+          : parsed.harness
+            ? [parsed.harness]
+            : [];
+      parsed.harnesses = harnesses;
+      if (!parsed.harness && harnesses.length > 0) {
+        parsed.harness = harnesses[0];
+      }
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -40,18 +53,28 @@ export function readManifest(targetDir: string): CrewmateManifest | null {
  */
 export function writeManifest(
   targetDir: string,
-  harness: string,
+  harness: string | string[],
   files: Record<string, ManifestFileEntry>,
   installedAt?: string
 ): CrewmateManifest {
   const manifestDir = join(targetDir, '.crewmate');
   mkdirSync(manifestDir, { recursive: true });
 
+  const existing = readManifest(targetDir);
+  const existingHarnesses = existing?.harnesses ?? (existing?.harness ? [existing.harness] : []);
+  const newHarnessList = Array.isArray(harness) ? harness : [harness];
+
+  const combinedHarnesses = Array.from(new Set([...existingHarnesses, ...newHarnessList]));
+
+  const primaryHarness =
+    newHarnessList.length > 0 ? newHarnessList[newHarnessList.length - 1] : combinedHarnesses[0];
+
   const now = new Date().toISOString();
   const manifest: CrewmateManifest = {
     version: CREWMATE_VERSION,
-    harness,
-    installedAt: installedAt ?? now,
+    harness: primaryHarness,
+    harnesses: combinedHarnesses,
+    installedAt: existing?.installedAt ?? installedAt ?? now,
     updatedAt: now,
     files,
   };

@@ -85,8 +85,11 @@ export class OpenCodeAdapter implements HarnessAdapter {
    * @returns Promise resolving to installation result with harness name and written files
    */
   async install(targetDir: string): Promise<InstallResult> {
+    const existingManifest = readManifest(targetDir);
+    const manifestEntries: Record<string, ManifestFileEntry> = {
+      ...(existingManifest?.files ?? {}),
+    };
     const filesWritten: string[] = [];
-    const manifestEntries: Record<string, ManifestFileEntry> = {};
     const now = new Date().toISOString();
 
     const templateFiles = this.getTemplateFiles();
@@ -112,7 +115,7 @@ export class OpenCodeAdapter implements HarnessAdapter {
       updatedAt: now,
     };
 
-    writeManifest(targetDir, this.name, manifestEntries, now);
+    writeManifest(targetDir, this.name, manifestEntries, existingManifest?.installedAt ?? now);
 
     return { harness: this.name, filesWritten };
   }

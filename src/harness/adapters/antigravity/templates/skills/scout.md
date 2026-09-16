@@ -54,5 +54,5 @@ Always format the discovery report in chat using this structure:
 - **Tooling & Scripts:** [Build, dev, lint, and test commands found]
 - **Existing Documentation:** [README or docs observed]
 
-*(Scout reports only objective facts. Next, we will discuss which of these facts to reflect in optional brief fields.)*
+*(Scout reports only objective facts. Record key facts via `crewmate_add_artifact(type: "fact")` and discuss optional brief fields with the user.)*
 ```

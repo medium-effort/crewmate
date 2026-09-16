@@ -11,7 +11,11 @@ interface ErrorOutput {
   available?: string[];
 }
 
-type UpdateCommandOutput = ({ ok: true } & UpdateResult) | ErrorOutput;
+export interface MultiUpdateResult extends UpdateResult {
+  harnesses?: string[];
+}
+
+export type UpdateCommandOutput = ({ ok: true } & MultiUpdateResult) | ErrorOutput;
 
 function out(data: UpdateCommandOutput, jsonOnly: boolean = false): void {
   if (!jsonOnly) {
@@ -21,7 +25,7 @@ function out(data: UpdateCommandOutput, jsonOnly: boolean = false): void {
   }
 }
 
-function formatOutput(data: UpdateCommandOutput): string {
+export function formatOutput(data: UpdateCommandOutput): string {
   if (data.ok === false) {
     const lines = [`Error: ${data.error}`];
     if (data.available && Array.isArray(data.available)) {
@@ -34,8 +38,13 @@ function formatOutput(data: UpdateCommandOutput): string {
   }
 
   const successData = data as Extract<UpdateCommandOutput, { ok: true }>;
+  const targetDesc =
+    successData.harnesses && successData.harnesses.length > 1
+      ? successData.harnesses.join(', ')
+      : successData.harness;
+
   const lines = [
-    `Updated crewmate integration for ${successData.harness} (v${successData.version})${successData.dryRun ? ' [DRY RUN]' : ''}`,
+    `Updated crewmate integration for ${targetDesc} (v${successData.version})${successData.dryRun ? ' [DRY RUN]' : ''}`,
     '',
     'Files:',
   ];
@@ -88,39 +97,16 @@ export function registerUpdateCommand(program: Command): void {
   program
     .command('update')
     .description('Update crewmate integration files, prompts, plugins, and dependencies')
-    .option('-H, --harness <name>', `Target harness (${listAdapterNames().join(', ')})`)
+    .option(
+      '-H, --harness <name>',
+      `Target harness (${listAdapterNames().join(', ')}, comma-separated list, or 'all')`
+    )
     .option('-d, --dir <path>', 'Target directory (defaults to current directory)')
     .option('--dry-run', 'Display planned updates without writing changes', false)
     .option('--no-backup', 'Do not create backup files before updating modified templates')
     .option('--json', 'Output raw JSON only (no human-readable messages)', false)
     .action(async (opts) => {
       const targetDir = opts.dir ?? process.cwd();
-
-      // Auto-detect installed harness from manifest if not explicitly provided
-      let harnessName = opts.harness;
-      if (!harnessName) {
-        const manifest = readManifest(targetDir);
-        if (manifest?.harness) {
-          harnessName = manifest.harness;
-        } else if (existsSync(join(targetDir, '.agents', 'plugins', 'crewmate'))) {
-          harnessName = 'antigravity-ide';
-        } else if (existsSync(join(targetDir, '.opencode'))) {
-          harnessName = 'opencode';
-        } else {
-          harnessName = 'opencode';
-        }
-      }
-
-      const adapter = getAdapter(harnessName);
-      if (!adapter) {
-        fail(
-          `Unknown harness "${harnessName}"`,
-          {
-            available: listAdapterNames(),
-          },
-          opts.json
-        );
-      }
 
       const opencodeDir = join(targetDir, '.opencode');
       const agentsDir = join(targetDir, '.agents', 'plugins', 'crewmate');
@@ -133,16 +119,104 @@ export function registerUpdateCommand(program: Command): void {
         );
       }
 
+      let targetHarnesses: string[] = [];
+
+      if (opts.harness) {
+        const rawHarness = String(opts.harness).trim();
+        if (rawHarness.toLowerCase() === 'all') {
+          targetHarnesses = ['opencode', 'antigravity-ide'];
+        } else {
+          targetHarnesses = rawHarness
+            .split(',')
+            .map((h) => h.trim())
+            .filter(Boolean);
+        }
+      } else {
+        // Auto-detect installed harnesses from manifest or filesystem
+        const manifest = readManifest(targetDir);
+        if (manifest?.harnesses && manifest.harnesses.length > 0) {
+          targetHarnesses = [...manifest.harnesses];
+        } else if (manifest?.harness) {
+          targetHarnesses = [manifest.harness];
+        } else {
+          const detected: string[] = [];
+          if (existsSync(opencodeDir)) {
+            detected.push('opencode');
+          }
+          if (existsSync(agentsDir)) {
+            detected.push('antigravity-ide');
+          }
+          targetHarnesses = detected.length > 0 ? detected : ['opencode'];
+        }
+      }
+
+      for (const harnessName of targetHarnesses) {
+        const adapter = getAdapter(harnessName);
+        if (!adapter) {
+          fail(
+            `Unknown harness "${harnessName}"`,
+            {
+              available: listAdapterNames(),
+            },
+            opts.json
+          );
+        }
+      }
+
       try {
-        const result = await adapter.update(targetDir, {
-          dryRun: opts.dryRun,
-          backup: opts.backup,
-        });
+        const allFileStatuses: { path: string; action: any; backupPath?: string }[] = [];
+        const seenPaths = new Set<string>();
+        const allBackedUpFiles: string[] = [];
+        const executedHarnesses: string[] = [];
+        let version = '';
+
+        for (const harnessName of targetHarnesses) {
+          const adapter = getAdapter(harnessName)!;
+          const result = await adapter.update(targetDir, {
+            dryRun: opts.dryRun,
+            backup: opts.backup,
+          });
+
+          executedHarnesses.push(result.harness);
+          version = result.version;
+
+          for (const file of result.files) {
+            if (!seenPaths.has(file.path)) {
+              seenPaths.add(file.path);
+              allFileStatuses.push(file);
+            }
+          }
+
+          for (const backup of result.backedUpFiles) {
+            if (!allBackedUpFiles.includes(backup)) {
+              allBackedUpFiles.push(backup);
+            }
+          }
+        }
+
+        const summary = {
+          total: allFileStatuses.length,
+          created: allFileStatuses.filter((f) => f.action === 'created').length,
+          updated: allFileStatuses.filter(
+            (f) => f.action === 'updated' || f.action === 'backed_up_and_updated'
+          ).length,
+          unchanged: allFileStatuses.filter((f) => f.action === 'unchanged').length,
+          backedUp: allBackedUpFiles.length,
+          removed: allFileStatuses.filter(
+            (f) => f.action === 'backed_up_and_removed' || f.action === 'removed'
+          ).length,
+        };
 
         out(
           {
             ok: true,
-            ...result,
+            harness: executedHarnesses.join(', '),
+            harnesses: executedHarnesses,
+            version,
+            files: allFileStatuses,
+            backedUpFiles: allBackedUpFiles,
+            summary,
+            ...(opts.dryRun && { dryRun: true }),
           },
           opts.json
         );

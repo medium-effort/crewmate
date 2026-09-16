@@ -25,7 +25,13 @@ import { resolveBrief } from '../db/brief-repo.js';
 import type { WorkflowDefinition, AgentNodeConfig } from '../models/graph.js';
 import type { WorkflowRunView, WorkflowSummary } from '../models/workflow-run.js';
 
-function formatAgentSummary(run: WorkflowRunView): WorkflowSummary {
+/**
+ * Formats a workflow run view into a structured summary for agent consumption.
+ *
+ * @param run - The workflow run view to format
+ * @returns Structured workflow summary object
+ */
+export function formatAgentSummary(run: WorkflowRunView): WorkflowSummary {
   const currentStageDef = run.workflowDef.stages.find((s) => s.id === run.currentStage);
   const stageRunMap = new Map((run.stageRuns || []).map((sr) => [sr.stageId, sr.status]));
   const activeStageRun = run.stageRuns.find((sr) => sr.stageId === run.currentStage);
@@ -91,7 +97,12 @@ function formatAgentSummary(run: WorkflowRunView): WorkflowSummary {
   };
 }
 
-function regenerateModularWorkflow(targetDir: string = process.cwd()): void {
+/**
+ * Regenerates the modular workflow directory structure (.crewmate/workflows) in target directory.
+ *
+ * @param targetDir - The target directory to write files into
+ */
+export function regenerateModularWorkflow(targetDir: string = process.cwd()): void {
   const files = getModularWorkflowFiles();
   for (const [relPath, content] of Object.entries(files)) {
     const absPath = resolve(targetDir, relPath);
@@ -100,7 +111,13 @@ function regenerateModularWorkflow(targetDir: string = process.cwd()): void {
   }
 }
 
-function loadCustomWorkflowOrDefault(customPath?: string): WorkflowDefinition {
+/**
+ * Loads a custom workflow definition from path or falls back to default workflow.
+ *
+ * @param customPath - Optional path to custom workflow JSON file
+ * @returns Resolved workflow definition
+ */
+export function loadCustomWorkflowOrDefault(customPath?: string): WorkflowDefinition {
   if (customPath) {
     const fullPath = resolve(process.cwd(), customPath);
     if (existsSync(fullPath)) {

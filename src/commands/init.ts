@@ -5,6 +5,7 @@ import { getAdapter, listAdapterNames } from '../harness/registry.js';
 interface SuccessOutput {
   ok: true;
   harness: string;
+  harnesses?: string[];
   filesWritten: string[];
 }
 
@@ -52,11 +53,12 @@ export function formatOutput(data: InitCommandOutput): string {
   // Type guard for SuccessOutput
   if ('harness' in data) {
     const successData = data as Extract<InitCommandOutput, { ok: true }>;
-    const lines = [
-      `Initialized crewmate integration for ${successData.harness}`,
-      '',
-      `Created files:`,
-    ];
+    const targetDesc =
+      successData.harnesses && successData.harnesses.length > 1
+        ? successData.harnesses.join(', ')
+        : successData.harness;
+
+    const lines = [`Initialized crewmate integration for ${targetDesc}`, '', `Created files:`];
 
     if ('filesWritten' in successData && Array.isArray(successData.filesWritten)) {
       for (const file of successData.filesWritten) {
@@ -64,7 +66,13 @@ export function formatOutput(data: InitCommandOutput): string {
       }
     }
 
-    if (successData.harness === 'antigravity-ide' || successData.harness === 'antigravity') {
+    const hasAntigravity =
+      (successData.harnesses &&
+        successData.harnesses.some((h) => h === 'antigravity-ide' || h === 'antigravity')) ||
+      successData.harness === 'antigravity-ide' ||
+      successData.harness === 'antigravity';
+
+    if (hasAntigravity) {
       lines.push('');
       lines.push(
         'Note: If this workspace is already open in Antigravity IDE, reload the window to apply changes:'
@@ -100,31 +108,67 @@ function fail(
 export function registerInitCommand(program: Command): void {
   program
     .command('init')
-    .description('Install crewmate integration files for an AI harness')
-    .option('-H, --harness <name>', `Target harness (${listAdapterNames().join(', ')})`, 'opencode')
+    .description('Install crewmate integration files for one or more AI harnesses')
+    .option(
+      '-H, --harness <name>',
+      `Target harness (${listAdapterNames().join(', ')}, or comma-separated list, or 'all')`,
+      'opencode'
+    )
     .option('-d, --dir <path>', 'Target directory (defaults to current directory)')
     .option('--json', 'Output raw JSON only (no human-readable messages)', false)
     .action(async (opts) => {
-      const adapter = getAdapter(opts.harness);
-      if (!adapter) {
-        fail(
-          `Unknown harness "${opts.harness}"`,
-          {
-            available: listAdapterNames(),
-          },
-          opts.json
-        );
+      const rawHarnessInput = String(opts.harness ?? 'opencode').trim();
+      let targetHarnesses: string[];
+
+      if (rawHarnessInput.toLowerCase() === 'all') {
+        targetHarnesses = ['opencode', 'antigravity-ide'];
+      } else {
+        targetHarnesses = rawHarnessInput
+          .split(',')
+          .map((h) => h.trim())
+          .filter(Boolean);
+      }
+
+      if (targetHarnesses.length === 0) {
+        targetHarnesses = ['opencode'];
+      }
+
+      for (const harnessName of targetHarnesses) {
+        const adapter = getAdapter(harnessName);
+        if (!adapter) {
+          fail(
+            `Unknown harness "${harnessName}"`,
+            {
+              available: listAdapterNames(),
+            },
+            opts.json
+          );
+        }
       }
 
       const targetDir = opts.dir ?? process.cwd();
 
       try {
-        const result = await adapter.install(targetDir);
+        const allFilesWritten: string[] = [];
+        const executedHarnesses: string[] = [];
+
+        for (const harnessName of targetHarnesses) {
+          const adapter = getAdapter(harnessName)!;
+          const result = await adapter.install(targetDir);
+          executedHarnesses.push(result.harness);
+          for (const file of result.filesWritten) {
+            if (!allFilesWritten.includes(file)) {
+              allFilesWritten.push(file);
+            }
+          }
+        }
+
         out(
           {
             ok: true,
-            harness: result.harness,
-            filesWritten: result.filesWritten,
+            harness: executedHarnesses.join(', '),
+            harnesses: executedHarnesses,
+            filesWritten: allFilesWritten,
           },
           opts.json
         );

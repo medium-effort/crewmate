@@ -233,8 +233,8 @@ describe('crewmate init', () => {
       expect(output.harness).toBe('antigravity-ide');
       expect(Array.isArray(output.filesWritten)).toBe(true);
       expect(output.filesWritten).toContain('.agents/mcp_config.json');
-      expect(output.filesWritten).toContain('.agents/workflows/brief.md');
-      expect(output.filesWritten).toContain('.agents/workflows/execute.md');
+      expect(output.filesWritten).toContain('.agents/plugins/crewmate/skills/workflow/SKILL.md');
+      expect(output.filesWritten).toContain('.crewmate/workflows/default.json');
       expect(output.filesWritten).toContain('.agents/plugins/crewmate/plugin.json');
       expect(output.filesWritten).toContain('.agents/plugins/crewmate/mcp_config.json');
       expect(output.filesWritten).toContain('.agents/plugins/crewmate/hooks.json');

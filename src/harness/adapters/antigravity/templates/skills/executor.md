@@ -6,9 +6,10 @@ description: >-
 
 # Executor Task Implementation Protocol
 
-Frontman executes this protocol during the Task Execution phase (e.g., when `/execute` is run) for each ready task in dependency order. Its purpose is to safely implement code changes, prevent file conflicts with locks, verify functionality, and record incremental knowledge artifacts.
+Frontman executes this protocol during the `executor-run` node of a workflow run for each ready task in dependency order. Its purpose is to safely implement code changes, prevent file conflicts with locks, verify functionality, and record incremental knowledge artifacts.
 
 ## Execution Invariants
+- **Precheck Before Edit**: Run `crewmate_precheck_file` on target files to surface prior constraints, failed attempts, and API contracts.
 - **Lock Before Touch**: Never create or edit a file without first successfully acquiring a write lock via `crewmate_acquire_lock`.
 - **Lock Conflict Handling**: If `crewmate_acquire_lock` fails due to an active lock on a target file, **abort the task immediately**. Do not edit conflicting files. Emit a `crewmate_add_event` (actor `executor`, type `error`, message `"Lock conflict on <file>"`) and report the conflict.
 - **Mandatory Verification**: Every code modification must be verified by executing tests, linters, or build commands before marking the task completed.
@@ -22,7 +23,8 @@ For each ready task:
 
 ### 1. Task Intake & Context Gathering
 - Inspect task details (ID, title, description, target field).
-- Review established patterns, contracts, and constraints by inspecting prior artifacts with `crewmate_list_artifacts`.
+- Run precheck on expected target files: `crewmate_precheck_file(filePath: "path/to/file")`.
+- Review established patterns, contracts, and constraints by inspecting upstream DAG artifacts: `crewmate_list_artifacts(forTask: "<taskId>")`.
 
 ### 2. Lock Acquisition
 - Identify all target files to be created or modified.
@@ -38,12 +40,16 @@ For each ready task:
 - Follow existing workspace conventions.
 - Execute automated tests, type checks, or linters via terminal commands to confirm correctness.
 
-### 5. Record Knowledge Artifacts
-Record architectural decisions, API contracts, or constraints using `crewmate_add_artifact`:
-- `fact`: Concrete facts about system configuration or state.
-- `decision`: Key design or architectural choices made.
-- `api_contract`: Route, interface, or schema signatures exposed for subsequent tasks.
-- `constraint`: Important rules, gotchas, or bounds subsequent tasks must observe.
+### 5. Record Knowledge Artifacts & Handle Issues
+- If bugs or obstacles occur:
+  - Log issue: `crewmate_log_issue(summary: "...", taskId: "<taskId>", location: "...")`.
+  - Record attempts: `crewmate_record_attempt(summary: "...", outcome: "failed"|"worked"|"partial", taskId: "<taskId>")`.
+  - Record confirmed fix: `crewmate_record_fix(summary: "...", taskId: "<taskId>")`.
+- Record architectural decisions, API contracts, or constraints using `crewmate_add_artifact`:
+  - `fact`: Concrete facts about system configuration or state.
+  - `decision`: Key design or architectural choices made.
+  - `api_contract`: Route, interface, or schema signatures exposed for subsequent tasks.
+  - `constraint`: Important rules, gotchas, or bounds subsequent tasks must observe.
 
 ### 6. Completion & Lock Release
 - Mark task completed: `crewmate_update_task(taskId: "<taskId>", status: "completed")`.

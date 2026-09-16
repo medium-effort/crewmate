@@ -72,7 +72,8 @@ export interface ManifestFileEntry {
  */
 export interface CrewmateManifest {
   version: string;
-  harness: string;
+  harness?: string;
+  harnesses?: string[];
   installedAt: string;
   updatedAt: string;
   files: Record<string, ManifestFileEntry>;

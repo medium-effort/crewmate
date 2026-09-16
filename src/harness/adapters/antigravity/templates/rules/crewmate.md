@@ -75,21 +75,26 @@ When invoking `crewmate_update_field`, values must strictly adhere to the expect
 
 ## 4. Operational Protocols
 
-Procedural workflows are defined in dedicated workflow files:
-- **Project Briefing**: Follow [.agents/workflows/brief.md](../../workflows/brief.md) for step-by-step turn-yielding requirements gathering.
-- **Task Execution**: Follow [.agents/workflows/execute.md](../../workflows/execute.md) for the continuous task execution and file locking loop.
+Procedural execution is orchestrated through the graph workflow engine via [.agents/plugins/crewmate/skills/workflow/SKILL.md](../skills/workflow/SKILL.md).
 
-### Unslashed Intent Interception & Workflow Loading
-When the user requests briefing (e.g. "brief", "brief this project", "start briefing") or task execution (e.g. "execute", "execute task 2", "run tasks") in conversational text **without** using the formal slash command (`/brief` or `/execute`):
+### Unslashed Intent & Legacy Command Interception
+When the user requests briefing, planning, task execution, or invokes legacy commands (`/brief`, `/execute`, "brief this project", "execute tasks", "start project") without explicitly invoking `/workflow`:
 1. **Notify & Confirm via `ask_question`**:
-   - Do NOT immediately execute tasks or jump into unguided briefing without structured workflow orchestration.
-   - Prompt the user with `ask_question` notifying them that you will initiate the corresponding workflow action (e.g., `"(Recommended) Yes, proceed with /execute workflow"` or `"(Recommended) Yes, proceed with /brief workflow"`).
-2. **Mandatory Workflow Reading (`view_file`)**:
-   - Because the workflow was not triggered by a native slash command, Antigravity **did not automatically load the workflow instructions** into the active context.
-   - Upon user confirmation (or before proceeding with workflow execution), you **MUST explicitly read the target workflow file** ([.agents/workflows/brief.md](../../workflows/brief.md) or [.agents/workflows/execute.md](../../workflows/execute.md)) using `view_file`.
-   - Strictly adhere to the loaded workflow steps, invariants, file locks, verification checks, and artifact recording rules.
+   - Prompt the user notifying them that you will initiate the graph workflow run:
+     - Question: `"Would you like to start or resume the Crewmate workflow?"`
+     - Options: `["(Recommended) Yes, proceed with /workflow", "No, cancel"]`
+2. **Mandatory Skill Reading (`view_file`)**:
+   - When proceeding without native slash command triggering, you **MUST explicitly read [.agents/plugins/crewmate/skills/workflow/SKILL.md](../skills/workflow/SKILL.md)** using `view_file`.
+   - Check status via `crewmate_workflow_status`, execute the active `currentNode` step-by-step, and advance nodes with `crewmate_workflow_advance_node`.
 
-Technical protocols for Frontman action phases:
+### Node-Level Tool Permission Gates
+When executing within a graph workflow run:
+- Inspect `currentNode.allowedTools` and `currentNode.deniedTools` returned by `crewmate_workflow_status`.
+- Do not call tools that are denied during the active step (e.g. file modifying tools during research/discovery).
+- Orchestration tools (`ask_question`, `crewmate_set_activity`, `crewmate_workflow_*`) are always permitted to coordinate workflow progress.
+
+### Technical Protocols for Action Phases:
 - **Codebase Discovery**: Consult the `crewmate-scout` skill protocol.
 - **Task Decomposition**: Consult the `crewmate-planner` skill protocol.
 - **Task Implementation**: Consult the `crewmate-executor` skill protocol.
+- **Precheck & Artifact Memory**: Run `crewmate_precheck_file` before file edits, retrieve upstream contracts with `crewmate_list_artifacts(forTask: ...)`, and persist findings with `crewmate_add_artifact`.

@@ -26,12 +26,12 @@ import {
 import { PLUGIN_JSON } from './templates/plugin-json.js';
 import { MCP_CONFIG_JSON } from './templates/mcp-config-json.js';
 import { HOOKS_JSON } from './templates/hooks-json.js';
+import { getModularWorkflowFiles } from '../../../graph/modular-templates.js';
 import CREWMATE_RULE_MD from './templates/rules/crewmate.md';
 import SCOUT_SKILL_MD from './templates/skills/scout.md';
 import PLANNER_SKILL_MD from './templates/skills/planner.md';
 import EXECUTOR_SKILL_MD from './templates/skills/executor.md';
-import BRIEF_WORKFLOW_MD from './templates/workflows/brief.md';
-import EXECUTE_WORKFLOW_MD from './templates/workflows/execute.md';
+import WORKFLOW_SKILL_MD from './templates/skills/workflow.md';
 
 /**
  * Adapter for Antigravity AI coding assistant and agent harness.
@@ -49,6 +49,9 @@ export class AntigravityAdapter implements HarnessAdapter {
   readonly deprecatedFiles: string[] = [
     '.agents/plugins/crewmate/skills/crewmate-brief/SKILL.md',
     '.agents/plugins/crewmate/skills/crewmate-execute/SKILL.md',
+    '.agents/workflows/brief.md',
+    '.agents/workflows/execute.md',
+    '.agents/workflows/workflow.md',
   ];
 
   /**
@@ -102,15 +105,15 @@ export class AntigravityAdapter implements HarnessAdapter {
 
   private getTemplateFiles(): Record<string, string> {
     return {
-      '.agents/workflows/brief.md': BRIEF_WORKFLOW_MD,
-      '.agents/workflows/execute.md': EXECUTE_WORKFLOW_MD,
       '.agents/plugins/crewmate/plugin.json': PLUGIN_JSON,
       '.agents/plugins/crewmate/mcp_config.json': MCP_CONFIG_JSON,
       '.agents/plugins/crewmate/hooks.json': HOOKS_JSON,
       '.agents/plugins/crewmate/rules/crewmate.md': CREWMATE_RULE_MD,
+      '.agents/plugins/crewmate/skills/workflow/SKILL.md': WORKFLOW_SKILL_MD,
       '.agents/plugins/crewmate/skills/crewmate-scout/SKILL.md': SCOUT_SKILL_MD,
       '.agents/plugins/crewmate/skills/crewmate-planner/SKILL.md': PLANNER_SKILL_MD,
       '.agents/plugins/crewmate/skills/crewmate-executor/SKILL.md': EXECUTOR_SKILL_MD,
+      ...getModularWorkflowFiles(),
     };
   }
 
@@ -121,8 +124,11 @@ export class AntigravityAdapter implements HarnessAdapter {
    * @returns Promise resolving to installation result with harness name and written files
    */
   async install(targetDir: string): Promise<InstallResult> {
+    const existingManifest = readManifest(targetDir);
+    const manifestEntries: Record<string, ManifestFileEntry> = {
+      ...(existingManifest?.files ?? {}),
+    };
     const filesWritten: string[] = [];
-    const manifestEntries: Record<string, ManifestFileEntry> = {};
     const now = new Date().toISOString();
 
     // Clean up any known deprecated files that exist on disk
@@ -158,7 +164,7 @@ export class AntigravityAdapter implements HarnessAdapter {
       updatedAt: now,
     };
 
-    writeManifest(targetDir, this.name, manifestEntries, now);
+    writeManifest(targetDir, this.name, manifestEntries, existingManifest?.installedAt ?? now);
 
     return { harness: this.name, filesWritten };
   }

@@ -67,4 +67,4 @@ Once the user approves:
    - Note each returned task ID for subsequent tasks that depend on it.
 2. Call `crewmate_list_tasks` to retrieve the registered task registry.
 3. Display the final registered task table in your chat response.
-4. Set activity: `crewmate_set_activity(activityType: "idle", message: "Briefing complete")`.
+4. Advance node: `crewmate_workflow_advance_node`.
